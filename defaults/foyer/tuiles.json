@@ -1,11 +1,11 @@
 {
-  "description": "Tuiles du hub Foyer. Ce fichier t'appartient : il n'est jamais écrasé par les mises à jour. Types d'action : app (identifiant .desktop ou commande), url, commande, routine.",
+  "description": "Tuiles du hub Foyer. Ce fichier t'appartient : il n'est jamais écrasé par les mises à jour. Types d'action : app (identifiant .desktop), url, commande, routine. Pour une app, laisse « icone » vide : le hub prend l'icône officielle de l'application. Sinon, mets un emoji ou un nom d'icône.",
   "tuiles": [
-    { "id": "fichiers",   "nom": "Fichiers",   "icone": "📁", "description": "Gestionnaire de fichiers",  "action": { "type": "app", "cible": "org.gnome.Nautilus" } },
-    { "id": "navigateur", "nom": "LibreWolf",  "icone": "🦊", "description": "Navigateur web",            "action": { "type": "app", "cible": "librewolf" } },
-    { "id": "terminal",   "nom": "Terminal",   "icone": "⌨️", "description": "Terminal foot",             "action": { "type": "commande", "cible": "uwsm app -- foot" } },
-    { "id": "mail",       "nom": "Proton Mail","icone": "✉️", "description": "Messagerie chiffrée",       "action": { "type": "app", "cible": "me.proton.Mail" } },
-    { "id": "pass",       "nom": "Proton Pass","icone": "🔑", "description": "Gestionnaire de mots de passe", "action": { "type": "app", "cible": "me.proton.Pass" } },
+    { "id": "fichiers",   "nom": "Fichiers",      "icone": "", "description": "Gestionnaire de fichiers",           "action": { "type": "app", "cible": "org.gnome.Nautilus" } },
+    { "id": "navigateur", "nom": "LibreWolf",     "icone": "", "description": "Navigateur web",                     "action": { "type": "app", "cible": "librewolf" } },
+    { "id": "terminal",   "nom": "Terminal",      "icone": "", "description": "Terminal foot",                      "action": { "type": "app", "cible": "foot" } },
+    { "id": "mail",       "nom": "Proton Mail",   "icone": "", "description": "Messagerie chiffrée",                "action": { "type": "app", "cible": "me.proton.Mail" } },
+    { "id": "pass",       "nom": "Proton Pass",   "icone": "", "description": "Gestionnaire de mots de passe",      "action": { "type": "app", "cible": "me.proton.Pass" } },
     { "id": "maj",        "nom": "Mettre à jour", "icone": "⟳", "description": "Mise à jour du système et de Foyer", "action": { "type": "commande", "cible": "uwsm app -- foot -e sh -c 'foyer update; echo; read -p \"Entrée pour fermer\"'" } }
   ]
 }

@@ -51,18 +51,22 @@ if [[ ! -f "$FOYER_CONFIG/foyer/tuiles.json" ]]; then
   deposer "$D/foyer/tuiles.json" "$FOYER_CONFIG/foyer/tuiles.json"
   info "Tuiles par défaut : ~/.config/foyer/tuiles.json"
 fi
-# Si on est dans la session graphique, (re)lance le hub pour qu'il prenne la
-# nouvelle version tout de suite, sans attendre la prochaine connexion.
-if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
-  pkill -x qs 2>/dev/null || true
-  (setsid uwsm app -s b -- qs -c foyer >/dev/null 2>&1 &) || true
-  info "Hub (re)lancé : appuie sur Super pour l'ouvrir"
-fi
+
 
 # Fond d'écran : copié une seule fois, remplace ~/.config/foyer/fond.jpg par le tien.
 if [[ ! -f "$FOYER_CONFIG/foyer/fond.jpg" ]]; then
   deposer "$D/fonds/braise.jpg" "$FOYER_CONFIG/foyer/fond.jpg"
   info "Fond d'écran par défaut : ~/.config/foyer/fond.jpg"
+fi
+
+# Dans la session graphique : (re)lance le hub et le fond d'écran pour appliquer
+# la nouvelle version tout de suite, sans attendre la prochaine connexion.
+if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+  pkill -x qs 2>/dev/null || true
+  (setsid uwsm app -s b -- qs -c foyer >/dev/null 2>&1 &) || true
+  pkill -x swaybg 2>/dev/null || true
+  (setsid uwsm app -s b -- swaybg -m fill -i "$FOYER_CONFIG/foyer/fond.jpg" >/dev/null 2>&1 &) || true
+  info "Hub et fond d'écran (re)lancés"
 fi
 
 info "Lanceur de secours (fuzzel), notifications temporaires (mako), terminal (foot)"

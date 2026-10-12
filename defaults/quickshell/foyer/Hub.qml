@@ -20,7 +20,7 @@ PanelWindow {
     property date maintenant: new Date()
 
     // --- Palette (le futur thème global la remplacera) ---------------------
-    readonly property color cFond: "#e6111116"
+    readonly property color cFond: "#d9111116"
     readonly property color cCarte: "#1e1e26"
     readonly property color cCarteSurvol: "#2a2a34"
     readonly property color cTexte: "#f0ece6"
@@ -92,7 +92,7 @@ PanelWindow {
             const n = normaliser(t.nom);
             const d = normaliser(t.description);
             if (n.includes(q) || d.includes(q))
-                trouves.push({ genre: "tuile", nom: t.nom, detail: t.description || "Tuile", icone: t.icone || "", donnee: t, score: n.startsWith(q) ? 0 : 1 });
+                trouves.push({ genre: "tuile", nom: t.nom, detail: t.description || "Tuile", icone: iconeTuile(t), donnee: t, score: n.startsWith(q) ? 0 : 1 });
         }
         for (const a of DesktopEntries.applications.values) {
             const n = normaliser(a.name);
@@ -160,6 +160,17 @@ PanelWindow {
         return Quickshell.iconPath(icone, "application-x-executable");
     }
 
+    // Icône d'une tuile : celle de l'application quand l'action lance une app et
+    // qu'aucune icône n'est imposée (ou "auto") ; sinon l'icône indiquée.
+    function iconeTuile(t) {
+        const a = t.action || {};
+        if ((!t.icone || t.icone === "auto") && a.type === "app") {
+            const e = DesktopEntries.byId(a.cible) || DesktopEntries.heuristicLookup(a.cible);
+            if (e && e.icon) return e.icon;
+        }
+        return t.icone || "";
+    }
+
     // Une icône courte (1 ou 2 caractères, ex. un emoji) s'affiche comme du texte.
     function estGlyphe(icone) {
         return icone && [...icone].length <= 2;
@@ -191,35 +202,41 @@ PanelWindow {
         anchors.topMargin: Math.max(48, hub.height * 0.14)
         spacing: 18
 
-        // Ligne d'infos : heure, date, batterie
-        RowLayout {
+        // Ligne d'infos, alignée sur la barre de recherche :
+        // batterie à gauche, heure au centre, date à droite.
+        Item {
             Layout.fillWidth: true
-            spacing: 14
+            Layout.preferredHeight: heure.implicitHeight
             Text {
+                readonly property var batt: UPower.displayDevice
+                anchors.left: parent.left
+                anchors.leftMargin: 4
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 6
+                visible: batt && batt.isLaptopBattery
+                text: visible ? (UPower.onBattery ? "" : "⚡ ") + Math.round(batt.percentage * 100) + " %" : ""
+                color: hub.cDiscret
+                font.family: hub.police
+                font.pixelSize: 15
+            }
+            Text {
+                id: heure
+                anchors.horizontalCenter: parent.horizontalCenter
                 text: Qt.formatDateTime(hub.maintenant, "HH:mm")
                 color: hub.cTexte
                 font.family: hub.police
-                font.pixelSize: 40
+                font.pixelSize: 44
                 font.weight: Font.DemiBold
             }
             Text {
+                anchors.right: parent.right
+                anchors.rightMargin: 4
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 6
                 text: hub.maintenant.toLocaleDateString(Qt.locale("fr_FR"), "dddd d MMMM")
                 color: hub.cDiscret
                 font.family: hub.police
-                font.pixelSize: 16
-                Layout.alignment: Qt.AlignBottom
-                Layout.bottomMargin: 8
-            }
-            Item { Layout.fillWidth: true }
-            Text {
-                readonly property var batt: UPower.displayDevice
-                visible: batt && batt.isLaptopBattery
-                text: visible ? Math.round(batt.percentage * 100) + " %" + (UPower.onBattery ? "" : "  ⚡") : ""
-                color: hub.cDiscret
-                font.family: hub.police
-                font.pixelSize: 16
-                Layout.alignment: Qt.AlignBottom
-                Layout.bottomMargin: 8
+                font.pixelSize: 15
             }
         }
 
@@ -359,16 +376,18 @@ PanelWindow {
                             width: 32
                             height: 32
                             anchors.horizontalCenter: parent.horizontalCenter
+                            readonly property string icone: hub.iconeTuile(modelData)
                             Text {
                                 anchors.centerIn: parent
-                                visible: hub.estGlyphe(modelData.icone)
-                                text: modelData.icone || ""
+                                visible: hub.estGlyphe(parent.icone)
+                                text: parent.icone
+                                color: hub.cTexte
                                 font.pixelSize: 26
                             }
                             Image {
                                 anchors.fill: parent
-                                visible: !hub.estGlyphe(modelData.icone)
-                                source: hub.estGlyphe(modelData.icone) ? "" : hub.chemin(modelData.icone)
+                                visible: !hub.estGlyphe(parent.icone)
+                                source: hub.estGlyphe(parent.icone) ? "" : hub.chemin(parent.icone)
                                 sourceSize.width: 32
                                 sourceSize.height: 32
                             }
