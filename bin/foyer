@@ -77,9 +77,15 @@ installer_commande() {
   # Rend « foyer » disponible partout. Un petit script relais plutôt qu'un lien :
   # il passe par « bash », donc il marche même si le fichier a perdu ses droits
   # d'exécution (cas d'un envoi par l'interface web de GitHub).
-  printf '#!/bin/sh\nexec bash "%s/bin/foyer" "$@"\n' "$FOYER_DIR" \
-    | sudo tee /usr/local/bin/foyer >/dev/null
-  sudo chmod 755 /usr/local/bin/foyer
+  # Attention : l'ancienne version était un lien vers bin/foyer ; écrire « à travers »
+  # ce lien écraserait bin/foyer lui-même. On supprime donc d'abord l'existant, et on
+  # écrit dans un fichier temporaire avant de le mettre en place.
+  local tmp
+  tmp="$(mktemp)"
+  printf '#!/bin/sh\nexec bash "%s/bin/foyer" "$@"\n' "$FOYER_DIR" >"$tmp"
+  sudo rm -f /usr/local/bin/foyer
+  sudo install -m 755 "$tmp" /usr/local/bin/foyer
+  rm -f "$tmp"
 }
 
 cmd="${1:-aide}"
