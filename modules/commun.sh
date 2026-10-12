@@ -91,10 +91,17 @@ barre() {
 }
 
 # Installe un fichier de config « géré par Foyer » (écrasé à chaque mise à jour).
+# Écriture atomique (copie temporaire puis renommage) et seulement si le contenu
+# change : Hyprland relit sa config dès qu'un fichier bouge, et ne doit jamais
+# tomber sur un fichier absent ou à moitié écrit.
 deposer() {
-  local source="$1" cible="$2"
+  local source="$1" cible="$2" tmp
   mkdir -p "$(dirname "$cible")"
-  install -m 644 "$source" "$cible"
+  cmp -s "$source" "$cible" && return 0
+  tmp="$(mktemp "$(dirname "$cible")/.foyer.XXXXXX")"
+  cp "$source" "$tmp"
+  chmod 644 "$tmp"
+  mv -f "$tmp" "$cible"
 }
 
 # Écrit un fichier système seulement si son contenu change.

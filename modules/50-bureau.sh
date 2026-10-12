@@ -17,9 +17,10 @@ done
 
 # Profil graphique écrit par le module pilotes.
 profil="$(cat "$FOYER_CONFIG/foyer/profil-graphique" 2>/dev/null || echo normal)"
+materiel="$(mktemp)"
 if [[ "$profil" == "eco" ]]; then
   info "Profil « eco » : flou et ombres désactivés, animations allégées"
-  cat >"$FOYER_CONFIG/hypr/materiel.lua" <<'EOF'
+  cat >"$materiel" <<'EOF2'
 -- Géré par Foyer (profil graphique « eco », carte graphique ancienne)
 hl.config({
 	decoration = {
@@ -28,10 +29,12 @@ hl.config({
 	},
 	animations = { enabled = false },
 })
-EOF
+EOF2
 else
-  printf -- '-- Géré par Foyer (profil graphique « normal »)\n' >"$FOYER_CONFIG/hypr/materiel.lua"
+  printf -- '-- Géré par Foyer (profil graphique « normal »)\n' >"$materiel"
 fi
+deposer "$materiel" "$FOYER_CONFIG/hypr/materiel.lua"
+rm -f "$materiel"
 
 # Fichier personnel : créé une seule fois, jamais remplacé.
 if [[ ! -f "$FOYER_CONFIG/foyer/perso.lua" ]]; then
