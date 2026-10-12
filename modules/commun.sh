@@ -18,7 +18,14 @@ erreur()  { printf '\033[1;31m  XX %s\033[0m\n' "$*" >&2; _ecrire "XX $*"; exit 
 verifier_prerequis() {
   [[ $EUID -eq 0 ]] && erreur "Lance Foyer avec ton utilisateur, pas en root."
   [[ -f /etc/arch-release ]] || erreur "Foyer est prévu pour Arch Linux."
-  ping -c1 -W3 archlinux.org >/dev/null 2>&1 || erreur "Pas de connexion Internet (connecte-toi avec : nmtui)."
+  info "Vérification de la connexion Internet…"
+  if ! timeout 10 ping -c1 -W3 archlinux.org >/dev/null 2>&1; then
+    if timeout 5 ping -c1 -W3 9.9.9.9 >/dev/null 2>&1; then
+      erreur "Internet répond, mais pas la résolution des noms (DNS). Voir « DNS chiffré » dans le README."
+    fi
+    erreur "Pas de connexion Internet. Connecte-toi avec : nmtui"
+  fi
+  info "Droits administrateur (mot de passe de ton utilisateur)…"
   sudo -v || erreur "sudo est nécessaire."
 }
 
