@@ -2,13 +2,15 @@
 -- Ajoute ou remplace des raccourcis dans ~/.config/foyer/perso.lua.
 
 local terminal = "uwsm app -- foot"
-local lanceur = "uwsm app -- fuzzel" -- temporaire : sera remplacé par le hub
+local hub = "qs -c foyer ipc call hub basculer"
+local lanceur = "uwsm app -- fuzzel" -- lanceur de secours, si le hub ne répond pas
 -- LibreWolf natif s'il est installé (petites configurations), sinon la version Flatpak
 local navigateur = "uwsm app -- sh -c 'command -v librewolf >/dev/null && exec librewolf || exec flatpak run io.gitlab.librewolf-community'"
 local fichiers = "uwsm app -- nautilus"
 
--- Super seul (au relâchement) : ouvre le lanceur. Super + Espace en secours.
-hl.bind("SUPER + SUPER_L", hl.dsp.exec_cmd(lanceur), { release = true })
+-- Super seul (au relâchement) : ouvre ou ferme le hub.
+-- Super + Espace : lanceur de secours (fuzzel), utile si le hub ne répond pas.
+hl.bind("SUPER + SUPER_L", hl.dsp.exec_cmd(hub), { release = true })
 hl.bind("SUPER + SPACE", hl.dsp.exec_cmd(lanceur))
 
 hl.bind("SUPER + RETURN", hl.dsp.exec_cmd(terminal))

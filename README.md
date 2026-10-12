@@ -3,9 +3,9 @@
 Un bureau Arch Linux + Hyprland installé en une commande, pensé autour d'un point
 d'entrée unique (la touche Super) et du respect de la vie privée.
 
-**Version 0.2** : système de base, pilotes, logiciels, réglages de vie privée,
-Hyprland configuré, instantanés Btrfs. Le hub et la pastille arriveront ensuite ;
-en attendant, fuzzel (lanceur) et mako (notifications) tiennent leur place.
+**Version 0.3** : système de base, pilotes, logiciels, réglages de vie privée,
+Hyprland configuré, instantanés Btrfs, et **première version du hub** (touche
+Super). La pastille arrivera ensuite ; mako affiche les notifications en attendant.
 
 ## Installation
 
@@ -76,7 +76,8 @@ lance tout seul après la connexion.
 
 | Raccourci | Action |
 | --- | --- |
-| Super (seul) | Lanceur |
+| Super (seul) | Hub : recherche, tuiles, fenêtres ouvertes (✕ pour fermer d'un clic) |
+| Super + Espace | Lanceur de secours (fuzzel) |
 | Super + Entrée | Terminal |
 | Super + B | Navigateur (LibreWolf) |
 | Super + E | Fichiers |
@@ -97,6 +98,9 @@ foyer modules            # liste des modules
 foyer groupes            # groupes de logiciels optionnels (✔ = installé)
 foyer installer si       # ajoute un groupe plus tard
 ```
+
+Tuiles du hub : modifie `~/.config/foyer/tuiles.json` (jamais écrasé) ; le hub
+relit le fichier tout seul.
 
 Fond d'écran : remplace `~/.config/foyer/fond.jpg` par l'image de ton choix.
 

@@ -2,6 +2,8 @@
 hl.on("hyprland.start", function()
 	-- Fond d'écran (remplaçable : ~/.config/foyer/fond.jpg)
 	hl.exec_cmd("uwsm app -s b -- swaybg -m fill -i " .. os.getenv("HOME") .. "/.config/foyer/fond.jpg")
+	-- Hub Foyer (Quickshell)
+	hl.exec_cmd("uwsm app -s b -- qs -c foyer")
 	hl.exec_cmd("uwsm app -s b -t service -- mako")
 	hl.exec_cmd("uwsm app -s b -t service -- hypridle")
 	hl.exec_cmd("uwsm app -s b -- udiskie --no-tray")
