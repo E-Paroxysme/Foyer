@@ -3,7 +3,8 @@
 
 local terminal = "uwsm app -- foot"
 local lanceur = "uwsm app -- fuzzel" -- temporaire : sera remplacé par le hub
-local navigateur = "uwsm app -- flatpak run io.gitlab.librewolf-community"
+-- LibreWolf natif s'il est installé (petites configurations), sinon la version Flatpak
+local navigateur = "uwsm app -- sh -c 'command -v librewolf >/dev/null && exec librewolf || exec flatpak run io.gitlab.librewolf-community'"
 local fichiers = "uwsm app -- nautilus"
 
 -- Super seul (au relâchement) : ouvre le lanceur. Super + Espace en secours.

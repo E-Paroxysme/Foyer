@@ -1,0 +1,3 @@
+# Description: Création graphique — Inkscape (vectoriel), GIMP (retouche)
+inkscape
+gimp

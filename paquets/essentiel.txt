@@ -1,0 +1,18 @@
+# Logiciels toujours installés, légers. Syntaxe des lignes :
+#   paquet            -> dépôts Arch (pacman)
+#   aur:paquet        -> AUR (yay)
+#   flatpak:id        -> Flathub
+# LibreWolf est géré à part (natif ou Flatpak selon la mémoire vive).
+nautilus
+sushi
+gnome-disk-utility
+evince
+imv
+mpv
+mat2
+aur:bibata-cursor-theme-bin
+flatpak:me.proton.Mail
+flatpak:me.proton.Pass
+flatpak:com.protonvpn.www
+flatpak:com.github.tchx84.Flatseal
+flatpak:fr.romainvigier.MetadataCleaner

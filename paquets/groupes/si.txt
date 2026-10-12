@@ -1,0 +1,4 @@
+# Description: Sciences de l'ingénieur — FreeCAD, KiCad, Arduino IDE (volumineux)
+freecad
+kicad
+aur:arduino-ide-bin

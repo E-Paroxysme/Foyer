@@ -5,7 +5,7 @@ xdg-desktop-portal-hyprland
 xdg-desktop-portal-gtk
 hyprlock
 hypridle
-hyprpaper
+swaybg                   # fond d'écran
 hyprpicker
 hyprsunset
 hyprpolkitagent

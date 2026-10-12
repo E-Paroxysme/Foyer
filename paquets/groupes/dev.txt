@@ -1,0 +1,4 @@
+# Description: Développement — VS Code officiel, conteneurs (Podman, Distrobox)
+aur:visual-studio-code-bin
+podman
+distrobox

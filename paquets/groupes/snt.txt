@@ -1,0 +1,3 @@
+# Description: SNT — Thonny (Python), Wireshark (réseau)
+wireshark-qt
+flatpak:org.thonny.Thonny

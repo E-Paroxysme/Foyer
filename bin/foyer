@@ -4,6 +4,8 @@
 #   foyer update             met à jour le dépôt, relance tous les modules et les migrations
 #   foyer update <module>    met à jour le dépôt et relance un seul module (ex. : foyer update vie-privee)
 #   foyer modules            liste les modules disponibles
+#   foyer groupes            liste les groupes de logiciels optionnels
+#   foyer installer <groupe> installe un groupe optionnel (ex. : foyer installer si)
 set -euo pipefail
 
 FOYER_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
@@ -17,14 +19,36 @@ lister_modules() {
 
 nom_module() { basename "$1" .sh | cut -d- -f2-; }
 
+# Poids de chaque module dans la progression globale (le volume réel de travail).
+declare -A POIDS=([depots]=10 [pilotes]=5 [paquets]=60 [vie-privee]=4 [bureau]=4 [services]=2 [instantanes]=15)
+FAIT=0 TOTAL=0 RANG=0 NB=0
+
+preparer_progression() {
+  local f
+  TOTAL=0; FAIT=0; RANG=0; NB=$#
+  for f in "$@"; do TOTAL=$((TOTAL + ${POIDS[$(nom_module "$f")]:-5})); done
+}
+
 lancer_module() {
-  local fichier="$1"
-  etape "Module : $(nom_module "$fichier")"
+  local fichier="$1" nom
+  nom="$(nom_module "$fichier")"
+  RANG=$((RANG + 1))
+  barre $((FAIT * 100 / TOTAL)) "Étape $RANG/$NB — $nom"
+  etape "Module : $nom"
   # Chaque module s'exécute dans un sous-shell : une erreur s'arrête là,
   # avec un message clair, sans laisser d'état à moitié chargé.
   if ! bash "$fichier"; then
-    erreur "Le module « $(nom_module "$fichier") » a échoué. Journal : $FOYER_JOURNAL"
+    erreur "Le module « $nom » a échoué. Journal : $FOYER_JOURNAL"
   fi
+  FAIT=$((FAIT + ${POIDS[$nom]:-5}))
+}
+
+lancer_tous() {
+  local liste
+  mapfile -t liste < <(lister_modules)
+  preparer_progression "${liste[@]}"
+  for f in "${liste[@]}"; do lancer_module "$f"; done
+  barre 100 "Terminé"
 }
 
 lancer_migrations() {
@@ -59,7 +83,7 @@ case "$cmd" in
   install)
     verifier_prerequis
     installer_commande
-    for f in $(lister_modules); do lancer_module "$f"; done
+    lancer_tous
     lancer_migrations
     succes "Installation terminée. Redémarre l'ordinateur : sudo reboot"
     ;;
@@ -69,9 +93,10 @@ case "$cmd" in
     if [[ -n "${2:-}" ]]; then
       f="$(lister_modules | grep -E "/[0-9]{2}-$2\.sh$" || true)"
       [[ -n "$f" ]] || erreur "Module inconnu : $2 (voir : foyer modules)"
+      preparer_progression "$f"
       lancer_module "$f"
     else
-      for f in $(lister_modules); do lancer_module "$f"; done
+      lancer_tous
     fi
     lancer_migrations
     succes "Mise à jour terminée."
@@ -79,7 +104,25 @@ case "$cmd" in
   modules)
     for f in $(lister_modules); do echo "  $(nom_module "$f")"; done
     ;;
+  groupes)
+    choix="$FOYER_CONFIG/foyer/groupes"
+    for g in "$FOYER_DIR"/paquets/groupes/*.txt; do
+      nom="$(basename "$g" .txt)"
+      etat="  "; grep -qxF "$nom" "$choix" 2>/dev/null && etat="✔ "
+      printf '  %s%-12s %s\n' "$etat" "$nom" "$(description_groupe "$g")"
+    done
+    ;;
+  installer)
+    [[ -n "${2:-}" ]] || erreur "Précise un groupe (voir : foyer groupes)"
+    [[ -f "$FOYER_DIR/paquets/groupes/$2.txt" ]] || erreur "Groupe inconnu : $2 (voir : foyer groupes)"
+    verifier_prerequis
+    etape "Groupe : $(description_groupe "$FOYER_DIR/paquets/groupes/$2.txt")"
+    installer_liste "$FOYER_DIR/paquets/groupes/$2.txt"
+    mkdir -p "$FOYER_CONFIG/foyer"
+    grep -qxF "$2" "$FOYER_CONFIG/foyer/groupes" 2>/dev/null || echo "$2" >>"$FOYER_CONFIG/foyer/groupes"
+    succes "Groupe « $2 » installé."
+    ;;
   *)
-    sed -n '2,6p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,8p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     ;;
 esac

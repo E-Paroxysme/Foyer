@@ -3,7 +3,7 @@
 Un bureau Arch Linux + Hyprland installé en une commande, pensé autour d'un point
 d'entrée unique (la touche Super) et du respect de la vie privée.
 
-**Version 0.1** : système de base, pilotes, logiciels, réglages de vie privée,
+**Version 0.2** : système de base, pilotes, logiciels, réglages de vie privée,
 Hyprland configuré, instantanés Btrfs. Le hub et la pastille arriveront ensuite ;
 en attendant, fuzzel (lanceur) et mako (notifications) tiennent leur place.
 
@@ -66,7 +66,10 @@ Connecte-toi avec ton utilisateur. Si tu es en Wi-Fi : `nmtui`. Puis :
 curl -fsSL https://raw.githubusercontent.com/E-Paroxysme/Foyer/main/install.sh | bash
 ```
 
-Compte 20 à 60 minutes selon la connexion. Redémarre à la fin : Hyprland se
+Le script te demande d'abord quels **groupes de logiciels optionnels** installer
+(bureautique, création, SI, SNT, développement). Une barre de progression
+globale indique ensuite l'avancement. Compte 15 à 60 minutes selon la connexion
+et les groupes choisis. Redémarre à la fin : Hyprland se
 lance tout seul après la connexion.
 
 ## Utilisation
@@ -91,7 +94,11 @@ lance tout seul après la connexion.
 foyer update             # tout
 foyer update vie-privee  # un seul module
 foyer modules            # liste des modules
+foyer groupes            # groupes de logiciels optionnels (✔ = installé)
+foyer installer si       # ajoute un groupe plus tard
 ```
+
+Fond d'écran : remplace `~/.config/foyer/fond.jpg` par l'image de ton choix.
 
 Tes réglages personnels vont dans `~/.config/foyer/perso.lua` : ce fichier n'est
 jamais écrasé. Les autres fichiers de config marqués « Géré par Foyer » sont

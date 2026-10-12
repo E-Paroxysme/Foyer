@@ -1,0 +1,6 @@
+# Description: Bureautique — LibreOffice, annotation de PDF, numérisation, Nextcloud
+libreoffice-fresh
+libreoffice-fresh-fr
+xournalpp
+simple-scan
+nextcloud-client

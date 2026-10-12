@@ -43,6 +43,53 @@ pacman_installer() {
   sudo pacman -S --needed --noconfirm "${valides[@]}"
 }
 
+flatpak_installer() {
+  local id
+  for id in "$@"; do
+    if flatpak info "$id" >/dev/null 2>&1; then
+      info "$id déjà installé"
+    else
+      info "Flatpak : $id"
+      sudo flatpak install -y --noninteractive flathub "$id" >/dev/null \
+        || avertir "Flatpak introuvable ou en échec : $id"
+    fi
+  done
+}
+
+aur_installer() {
+  [[ $# -eq 0 ]] && return 0
+  yay -S --needed --noconfirm "$@" || avertir "Certains paquets AUR n'ont pas pu être installés : $*"
+}
+
+# Installe une liste mixte : « paquet », « aur:paquet », « flatpak:id ».
+installer_liste() {
+  local fichier="$1" ligne p_pacman=() p_aur=() p_flatpak=()
+  while read -r ligne; do
+    case "$ligne" in
+      aur:*)     p_aur+=("${ligne#aur:}") ;;
+      flatpak:*) p_flatpak+=("${ligne#flatpak:}") ;;
+      *)         p_pacman+=("$ligne") ;;
+    esac
+  done < <(lire_liste "$fichier")
+  pacman_installer "${p_pacman[@]}"
+  aur_installer "${p_aur[@]}"
+  flatpak_installer "${p_flatpak[@]}"
+}
+
+# Description d'un groupe (1re ligne « # Description: … »).
+description_groupe() {
+  sed -n 's/^# Description: //p' "$1" | head -1
+}
+
+# Barre de progression : barre <pourcentage> <texte>
+barre() {
+  local pct="$1" texte="$2" i b=""
+  for ((i = 0; i < 20; i++)); do
+    if ((i < pct / 5)); then b+="█"; else b+="░"; fi
+  done
+  printf '\n\033[1;37m[%s] %3d %%  %s\033[0m\n' "$b" "$pct" "$texte"
+}
+
 # Installe un fichier de config « géré par Foyer » (écrasé à chaque mise à jour).
 deposer() {
   local source="$1" cible="$2"

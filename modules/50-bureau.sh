@@ -39,6 +39,12 @@ if [[ ! -f "$FOYER_CONFIG/foyer/perso.lua" ]]; then
   info "Fichier personnel créé : ~/.config/foyer/perso.lua"
 fi
 
+# Fond d'écran : copié une seule fois, remplace ~/.config/foyer/fond.jpg par le tien.
+if [[ ! -f "$FOYER_CONFIG/foyer/fond.jpg" ]]; then
+  deposer "$D/fonds/braise.jpg" "$FOYER_CONFIG/foyer/fond.jpg"
+  info "Fond d'écran par défaut : ~/.config/foyer/fond.jpg"
+fi
+
 info "Lanceur temporaire (fuzzel), notifications temporaires (mako), terminal (foot)"
 deposer "$D/fuzzel/fuzzel.ini" "$FOYER_CONFIG/fuzzel/fuzzel.ini"
 deposer "$D/mako/config"       "$FOYER_CONFIG/mako/config"
