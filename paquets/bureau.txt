@@ -1,0 +1,49 @@
+# Bureau Hyprland et briques temporaires (remplacées plus tard par le hub et la pastille).
+hyprland
+uwsm
+xdg-desktop-portal-hyprland
+xdg-desktop-portal-gtk
+hyprlock
+hypridle
+hyprpaper
+hyprpicker
+hyprsunset
+hyprpolkitagent
+qt5-wayland
+qt6-wayland
+wl-clipboard
+cliphist
+grim
+slurp
+brightnessctl
+playerctl
+libnotify
+
+# Briques temporaires
+fuzzel        # lanceur, en attendant le hub
+mako          # notifications, en attendant la pastille
+
+# Terminal et outils
+foot
+bash-completion
+starship
+fzf
+ripgrep
+fd
+bat
+eza
+zoxide
+jq
+tldr
+lazygit
+neovim
+
+# Polices
+noto-fonts
+noto-fonts-emoji
+noto-fonts-cjk
+ttf-jetbrains-mono-nerd
+inter-font
+
+# Quickshell (base du futur hub)
+quickshell

@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# Commande principale de Foyer.
+#   foyer install            installe tout (tous les modules, puis les migrations)
+#   foyer update             met à jour le dépôt, relance tous les modules et les migrations
+#   foyer update <module>    met à jour le dépôt et relance un seul module (ex. : foyer update vie-privee)
+#   foyer modules            liste les modules disponibles
+set -euo pipefail
+
+FOYER_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+export FOYER_DIR
+# shellcheck source=../modules/commun.sh
+source "$FOYER_DIR/modules/commun.sh"
+
+lister_modules() {
+  find "$FOYER_DIR/modules" -maxdepth 1 -name '[0-9][0-9]-*.sh' | sort
+}
+
+nom_module() { basename "$1" .sh | cut -d- -f2-; }
+
+lancer_module() {
+  local fichier="$1"
+  etape "Module : $(nom_module "$fichier")"
+  # Chaque module s'exécute dans un sous-shell : une erreur s'arrête là,
+  # avec un message clair, sans laisser d'état à moitié chargé.
+  if ! bash "$fichier"; then
+    erreur "Le module « $(nom_module "$fichier") » a échoué. Journal : $FOYER_JOURNAL"
+  fi
+}
+
+lancer_migrations() {
+  local etat="$FOYER_ETAT/migrations-faites"
+  touch "$etat"
+  local m
+  for m in $(find "$FOYER_DIR/migrations" -maxdepth 1 -name '*.sh' | sort); do
+    local id
+    id="$(basename "$m")"
+    if ! grep -qxF "$id" "$etat"; then
+      etape "Migration : $id"
+      bash "$m" || erreur "La migration $id a échoué."
+      echo "$id" >>"$etat"
+    fi
+  done
+}
+
+mettre_a_jour_depot() {
+  if [[ -d "$FOYER_DIR/.git" ]]; then
+    info "Mise à jour du dépôt Foyer…"
+    git -C "$FOYER_DIR" pull --ff-only || avertir "Mise à jour du dépôt impossible, on continue avec la version locale."
+  fi
+}
+
+installer_commande() {
+  # Rend « foyer » disponible partout.
+  sudo ln -sf "$FOYER_DIR/bin/foyer" /usr/local/bin/foyer
+}
+
+cmd="${1:-aide}"
+case "$cmd" in
+  install)
+    verifier_prerequis
+    installer_commande
+    for f in $(lister_modules); do lancer_module "$f"; done
+    lancer_migrations
+    succes "Installation terminée. Redémarre l'ordinateur : sudo reboot"
+    ;;
+  update)
+    verifier_prerequis
+    mettre_a_jour_depot
+    if [[ -n "${2:-}" ]]; then
+      f="$(lister_modules | grep -E "/[0-9]{2}-$2\.sh$" || true)"
+      [[ -n "$f" ]] || erreur "Module inconnu : $2 (voir : foyer modules)"
+      lancer_module "$f"
+    else
+      for f in $(lister_modules); do lancer_module "$f"; done
+    fi
+    lancer_migrations
+    succes "Mise à jour terminée."
+    ;;
+  modules)
+    for f in $(lister_modules); do echo "  $(nom_module "$f")"; done
+    ;;
+  *)
+    sed -n '2,6p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    ;;
+esac

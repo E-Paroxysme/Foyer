@@ -1,0 +1,7 @@
+# Applications Flatpak (Flathub). Identifiants à vérifier si une installation échoue.
+io.gitlab.librewolf-community     # LibreWolf
+me.proton.Mail                    # Proton Mail
+me.proton.Pass                    # Proton Pass
+com.protonvpn.www                 # Proton VPN
+com.github.tchx84.Flatseal        # gestion des permissions Flatpak
+fr.romainvigier.MetadataCleaner   # nettoyage des métadonnées (interface de mat2)

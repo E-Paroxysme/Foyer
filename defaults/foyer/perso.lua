@@ -1,0 +1,8 @@
+-- Tes réglages personnels Hyprland. Ce fichier n'est JAMAIS écrasé par Foyer.
+-- Il est chargé en dernier : ce que tu écris ici remplace les réglages par défaut.
+--
+-- Exemples (retire les « -- » en début de ligne pour les activer) :
+--
+-- hl.config({ general = { gaps_out = 4 } })
+-- hl.bind("SUPER + M", hl.dsp.exec_cmd("uwsm app -- flatpak run me.proton.Mail"))
+-- hl.monitor({ output = "HDMI-A-1", mode = "1920x1080@60", position = "auto-right", scale = "1" })

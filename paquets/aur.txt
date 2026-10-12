@@ -1,0 +1,4 @@
+# Paquets AUR (installés avec yay).
+visual-studio-code-bin     # VS Code officiel (Copilot, extensions Microsoft)
+bibata-cursor-theme-bin    # curseur Bibata Modern Ice
+arduino-ide-bin            # Arduino IDE 2
