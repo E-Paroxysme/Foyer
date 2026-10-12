@@ -74,8 +74,12 @@ mettre_a_jour_depot() {
 }
 
 installer_commande() {
-  # Rend « foyer » disponible partout.
-  sudo ln -sf "$FOYER_DIR/bin/foyer" /usr/local/bin/foyer
+  # Rend « foyer » disponible partout. Un petit script relais plutôt qu'un lien :
+  # il passe par « bash », donc il marche même si le fichier a perdu ses droits
+  # d'exécution (cas d'un envoi par l'interface web de GitHub).
+  printf '#!/bin/sh\nexec bash "%s/bin/foyer" "$@"\n' "$FOYER_DIR" \
+    | sudo tee /usr/local/bin/foyer >/dev/null
+  sudo chmod 755 /usr/local/bin/foyer
 }
 
 cmd="${1:-aide}"
@@ -91,6 +95,7 @@ case "$cmd" in
     verifier_prerequis
     if [[ -z "${FOYER_RELANCE:-}" ]]; then
       mettre_a_jour_depot
+      installer_commande
       # La commande foyer elle-même vient peut-être d'être mise à jour : on relance
       # la nouvelle version pour que tout le reste s'exécute avec le code à jour.
       export FOYER_RELANCE=1
