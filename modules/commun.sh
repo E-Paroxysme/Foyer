@@ -49,8 +49,8 @@ flatpak_installer() {
     if flatpak info "$id" >/dev/null 2>&1; then
       info "$id déjà installé"
     else
-      info "Flatpak : $id"
-      sudo flatpak install -y --noninteractive flathub "$id" >/dev/null \
+      info "Flatpak : $id (le premier peut télécharger un socle de plusieurs centaines de Mo)"
+      sudo flatpak install -y --noninteractive flathub "$id" \
         || avertir "Flatpak introuvable ou en échec : $id"
     fi
   done

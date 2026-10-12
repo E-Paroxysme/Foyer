@@ -42,14 +42,13 @@ sous_etape "essentiels"
 sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 installer_liste "$P/essentiel.txt"
 
-# LibreWolf : natif sous 4 Go de mémoire vive (un Flatpak charge ses propres
-# bibliothèques en plus de celles du système), Flatpak au-delà.
-ram_mo=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
-if ((ram_mo < 4000)); then
-  info "Mémoire vive : ${ram_mo} Mo -> LibreWolf natif (AUR)"
-  aur_installer librewolf-bin
+# LibreWolf : dans les dépôts officiels d'Arch depuis août 2026 (paquet natif,
+# plus léger qu'un Flatpak). Repli sur Flathub si le paquet n'est pas trouvé.
+if pacman -Si librewolf >/dev/null 2>&1; then
+  info "LibreWolf (dépôts Arch)"
+  pacman_installer librewolf
 else
-  info "Mémoire vive : ${ram_mo} Mo -> LibreWolf en Flatpak"
+  avertir "LibreWolf absent des dépôts : installation via Flathub"
   flatpak_installer io.gitlab.librewolf-community
 fi
 
