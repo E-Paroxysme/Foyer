@@ -1,14 +1,16 @@
 // Géré par Foyer. Le hub : un seul point d'entrée (touche Super).
-// v1 : heure et batterie, recherche d'applications et de tuiles, tuiles
-// personnalisables (~/.config/foyer/tuiles.json), fenêtres ouvertes avec
-// fermeture d'un clic.
+// v2 : heure et batterie, recherche d'applications et de tuiles, tuiles
+// personnalisables (~/.config/foyer/tuiles.json), lecteur de musique, fenêtres
+// ouvertes regroupées par bureau, navigation complète au clavier.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Hyprland
 import Quickshell.Services.UPower
+import Quickshell.Services.Mpris
 
 PanelWindow {
     id: hub
@@ -16,8 +18,16 @@ PanelWindow {
     property bool ouvert: false
     property var tuiles: []
     property var resultats: []
-    property int selection: 0
+    property int selection: 0     // résultat choisi (quand on cherche)
+    property int curseur: -1      // élément choisi sans recherche : tuiles puis fenêtres (-1 = aucun)
+    property bool afficherMusique: true
     property date maintenant: new Date()
+
+    readonly property bool enRecherche: recherche.text.length > 0
+    readonly property int nbTuiles: tuiles.length
+    readonly property var fenetres: listerFenetres()
+    readonly property int colonnes: Math.max(1, Math.floor((contenu.width + 12) / 112))
+    readonly property var lecteur: lecteurActif()
 
     // --- Palette (le futur thème global la remplacera) ---------------------
     readonly property color cFond: "#d9111116"
@@ -46,8 +56,19 @@ PanelWindow {
             maintenant = new Date();
             recherche.text = "";
             selection = 0;
+            curseur = -1;
             recherche.forceActiveFocus();
+            try {
+                Hyprland.refreshToplevels();
+            } catch (e) {}
         }
+    }
+
+    // Une fenêtre fermée raccourcit la liste : le curseur reste dans les bornes.
+    onFenetresChanged: {
+        const total = nbTuiles + fenetres.length;
+        if (curseur >= total)
+            curseur = total - 1;
     }
 
     // --- Données ------------------------------------------------------------
@@ -60,6 +81,8 @@ PanelWindow {
             try {
                 const donnees = JSON.parse(text());
                 hub.tuiles = Array.isArray(donnees) ? donnees : (donnees.tuiles || []);
+                const w = (donnees && donnees.widgets) || {};
+                hub.afficherMusique = w.musique !== false;
             } catch (e) {
                 console.warn("tuiles.json illisible : " + e);
                 hub.tuiles = [];
@@ -109,6 +132,41 @@ PanelWindow {
         return trouves.slice(0, 8);
     }
 
+    // Fenêtres ouvertes, avec leur bureau (via Hyprland), triées par bureau.
+    function listerFenetres() {
+        const hypr = Hyprland.toplevels ? Hyprland.toplevels.values : [];
+        const liste = ToplevelManager.toplevels.values.map((t, i) => {
+            let bureau = 0;
+            for (const h of hypr) {
+                if (h.wayland === t) {
+                    bureau = h.workspace ? h.workspace.id : 0;
+                    break;
+                }
+            }
+            return { fenetre: t, bureau: bureau, ordre: i };
+        });
+        const rang = b => (b > 0 ? b : 1000 - b);   // bureaux normaux d'abord, spéciaux et inconnus ensuite
+        liste.sort((a, b) => rang(a.bureau) - rang(b.bureau) || a.ordre - b.ordre);
+        return liste;
+    }
+
+    function nomBureau(b) {
+        if (b > 0) {
+            const actuel = Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id === b;
+            return "Bureau " + b + (actuel ? " · actuel" : "");
+        }
+        return b < 0 ? "Bureau spécial" : "";
+    }
+
+    // Lecteur affiché : celui qui joue, sinon le premier trouvé.
+    function lecteurActif() {
+        const lecteurs = Mpris.players.values;
+        for (const p of lecteurs)
+            if (p.isPlaying)
+                return p;
+        return lecteurs.length > 0 ? lecteurs[0] : null;
+    }
+
     function executer(commande) {
         Quickshell.execDetached(commande);
     }
@@ -154,6 +212,75 @@ PanelWindow {
         hub.ouvert = false;
     }
 
+    // --- Navigation au clavier (sans recherche : tuiles, puis fenêtres) ------
+    function bas() {
+        if (enRecherche) {
+            selection = Math.min(selection + 1, resultats.length - 1);
+            return;
+        }
+        const nT = nbTuiles, nF = fenetres.length;
+        if (nT + nF === 0)
+            return;
+        if (curseur < 0) {
+            curseur = 0;
+        } else if (curseur < nT) {
+            const ligne = Math.floor(curseur / colonnes);
+            const derniereLigne = Math.floor((nT - 1) / colonnes);
+            if (curseur + colonnes < nT) curseur += colonnes;
+            else if (ligne < derniereLigne) curseur = nT - 1;
+            else if (nF > 0) curseur = nT;
+        } else if (curseur < nT + nF - 1) {
+            curseur++;
+        }
+    }
+
+    function haut() {
+        if (enRecherche) {
+            selection = Math.max(selection - 1, 0);
+            return;
+        }
+        const nT = nbTuiles;
+        if (curseur < 0)
+            return;
+        if (curseur > nT) curseur--;
+        else if (curseur === nT) curseur = nT - 1;           // retour à la dernière tuile (ou -1 s'il n'y en a pas)
+        else curseur = curseur - colonnes >= 0 ? curseur - colonnes : -1;
+    }
+
+    // ← → : se déplacer dans les tuiles. Renvoie false si la touche doit aller au champ.
+    function lateral(sens) {
+        if (enRecherche || curseur < 0 || curseur >= nbTuiles)
+            return false;
+        curseur = Math.max(0, Math.min(nbTuiles - 1, curseur + sens));
+        return true;
+    }
+
+    function valider() {
+        if (enRecherche) {
+            activer(resultats[selection]);
+        } else if (curseur >= 0 && curseur < nbTuiles) {
+            lancerTuile(tuiles[curseur]);
+            ouvert = false;
+        } else if (curseur >= nbTuiles) {
+            const f = fenetres[curseur - nbTuiles];
+            if (f) {
+                f.fenetre.activate();
+                ouvert = false;
+            }
+        }
+    }
+
+    // Suppr : ferme la fenêtre choisie. Renvoie false si la touche doit aller au champ.
+    function fermerChoix() {
+        if (enRecherche || curseur < nbTuiles)
+            return false;
+        const f = fenetres[curseur - nbTuiles];
+        if (f)
+            f.fenetre.close();
+        return true;
+    }
+
+    // --- Icônes -------------------------------------------------------------
     function chemin(icone) {
         if (!icone) return "";
         if (icone.startsWith("/")) return "file://" + icone;
@@ -240,7 +367,8 @@ PanelWindow {
             }
         }
 
-        // Barre de recherche
+        // Barre de recherche. Elle garde le clavier en permanence : taper lance
+        // une recherche, les flèches naviguent dans les tuiles et les fenêtres.
         TextField {
             id: recherche
             Layout.fillWidth: true
@@ -255,22 +383,28 @@ PanelWindow {
                 radius: 14
                 color: hub.cCarte
                 border.width: 2
-                border.color: recherche.activeFocus ? hub.cAccent : "transparent"
+                border.color: recherche.activeFocus && hub.curseur < 0 ? hub.cAccent : "transparent"
             }
             onTextChanged: {
                 hub.resultats = hub.chercher(text);
                 hub.selection = 0;
+                hub.curseur = -1;
             }
             Keys.onEscapePressed: hub.ouvert = false
-            Keys.onDownPressed: hub.selection = Math.min(hub.selection + 1, hub.resultats.length - 1)
-            Keys.onUpPressed: hub.selection = Math.max(hub.selection - 1, 0)
-            Keys.onReturnPressed: hub.activer(hub.resultats[hub.selection])
-            Keys.onEnterPressed: hub.activer(hub.resultats[hub.selection])
+            Keys.onDownPressed: hub.bas()
+            Keys.onUpPressed: hub.haut()
+            Keys.onTabPressed: hub.bas()
+            Keys.onBacktabPressed: hub.haut()
+            Keys.onLeftPressed: event => event.accepted = hub.lateral(-1)
+            Keys.onRightPressed: event => event.accepted = hub.lateral(1)
+            Keys.onDeletePressed: event => event.accepted = hub.fermerChoix()
+            Keys.onReturnPressed: hub.valider()
+            Keys.onEnterPressed: hub.valider()
         }
 
         // Résultats de recherche
         ColumnLayout {
-            visible: recherche.text.length > 0
+            visible: hub.enRecherche
             Layout.fillWidth: true
             spacing: 4
 
@@ -354,7 +488,7 @@ PanelWindow {
 
         // Tuiles (quand la recherche est vide)
         Flow {
-            visible: recherche.text.length === 0 && hub.tuiles.length > 0
+            visible: !hub.enRecherche && hub.tuiles.length > 0
             Layout.fillWidth: true
             spacing: 12
 
@@ -362,11 +496,13 @@ PanelWindow {
                 model: hub.tuiles
                 delegate: Rectangle {
                     required property var modelData
+                    required property int index
+                    readonly property bool choisie: hub.curseur === index
                     width: 100
                     height: 92
                     radius: 14
-                    color: zoneTuile.containsMouse ? hub.cCarteSurvol : hub.cCarte
-                    border.width: zoneTuile.containsMouse ? 2 : 0
+                    color: zoneTuile.containsMouse || choisie ? hub.cCarteSurvol : hub.cCarte
+                    border.width: zoneTuile.containsMouse || choisie ? 2 : 0
                     border.color: hub.cAccent
 
                     Column {
@@ -415,82 +551,169 @@ PanelWindow {
             }
         }
 
-        // Fenêtres ouvertes (quand la recherche est vide)
+        // Lecteur de musique : apparaît dès qu'un lecteur est actif (LibreWolf,
+        // mpv, Spotify…). Désactivable dans tuiles.json : "widgets": { "musique": false }
+        Rectangle {
+            id: musique
+            readonly property var p: hub.lecteur
+            visible: hub.afficherMusique && p !== null && !hub.enRecherche
+            Layout.fillWidth: true
+            Layout.preferredHeight: 72
+            radius: 14
+            color: hub.cCarte
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 10
+                anchors.rightMargin: 12
+                spacing: 14
+
+                Rectangle {
+                    Layout.preferredWidth: 52
+                    Layout.preferredHeight: 52
+                    radius: 8
+                    color: hub.cCarteSurvol
+                    clip: true
+                    Text {
+                        anchors.centerIn: parent
+                        visible: pochette.status !== Image.Ready
+                        text: "♪"
+                        color: hub.cDiscret
+                        font.pixelSize: 24
+                    }
+                    Image {
+                        id: pochette
+                        anchors.fill: parent
+                        source: musique.p ? (musique.p.trackArtUrl || "") : ""
+                        fillMode: Image.PreserveAspectCrop
+                        sourceSize.width: 104
+                        sourceSize.height: 104
+                        asynchronous: true
+                    }
+                }
+                ColumnLayout {
+                    spacing: 2
+                    Layout.fillWidth: true
+                    Text {
+                        text: musique.p ? (musique.p.trackTitle || musique.p.identity || "Lecture") : ""
+                        color: hub.cTexte
+                        font.family: hub.police
+                        font.pixelSize: 15
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                    Text {
+                        text: musique.p ? [musique.p.trackArtist, musique.p.identity].filter(s => s).join(" · ") : ""
+                        color: hub.cDiscret
+                        font.family: hub.police
+                        font.pixelSize: 12
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                }
+                Bouton {
+                    glyphe: "⏮"
+                    actif: !!(musique.p && musique.p.canGoPrevious)
+                    onClic: musique.p.previous()
+                }
+                Bouton {
+                    glyphe: musique.p && musique.p.isPlaying ? "⏸" : "▶"
+                    actif: !!(musique.p && musique.p.canTogglePlaying)
+                    onClic: musique.p.togglePlaying()
+                }
+                Bouton {
+                    glyphe: "⏭"
+                    actif: !!(musique.p && musique.p.canGoNext)
+                    onClic: musique.p.next()
+                }
+            }
+        }
+
+        // Fenêtres ouvertes, regroupées par bureau (quand la recherche est vide)
         ColumnLayout {
-            visible: recherche.text.length === 0
+            visible: !hub.enRecherche
             Layout.fillWidth: true
             Layout.topMargin: 8
             spacing: 4
 
             Text {
-                text: ToplevelManager.toplevels.values.length > 0 ? "Fenêtres ouvertes" : "Aucune fenêtre ouverte"
+                visible: hub.fenetres.length === 0
+                text: "Aucune fenêtre ouverte"
                 color: hub.cDiscret
                 font.family: hub.police
                 font.pixelSize: 13
                 Layout.leftMargin: 4
-                Layout.bottomMargin: 4
             }
 
             Repeater {
-                model: ToplevelManager.toplevels
-                delegate: Rectangle {
+                model: hub.fenetres
+                delegate: ColumnLayout {
                     id: ligne
                     required property var modelData
-                    readonly property var entree: DesktopEntries.heuristicLookup(modelData.appId)
+                    required property int index
+                    readonly property var fenetre: modelData.fenetre
+                    readonly property var entree: DesktopEntries.heuristicLookup(fenetre.appId)
+                    readonly property bool choisie: hub.curseur === hub.nbTuiles + index
+                    readonly property bool nouveauBureau: index === 0 || hub.fenetres[index - 1].bureau !== modelData.bureau
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 46
-                    radius: 10
-                    color: zoneFenetre.containsMouse ? hub.cCarte : "transparent"
+                    spacing: 4
 
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 8
-                        spacing: 12
-                        Image {
-                            Layout.preferredWidth: 24
-                            Layout.preferredHeight: 24
-                            source: hub.chemin(ligne.entree ? ligne.entree.icon : ligne.modelData.appId)
-                            sourceSize.width: 24
-                            sourceSize.height: 24
-                        }
-                        Text {
-                            text: ligne.modelData.title || ligne.modelData.appId
-                            color: ligne.modelData.activated ? hub.cTexte : hub.cDiscret
-                            font.family: hub.police
-                            font.pixelSize: 14
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
-                        }
-                        // Bouton fermer : un clic ferme l'application
-                        Rectangle {
-                            Layout.preferredWidth: 30
-                            Layout.preferredHeight: 30
-                            radius: 8
-                            color: zoneFermer.containsMouse ? "#5a2a24" : "transparent"
-                            z: 2
-                            Text {
-                                anchors.centerIn: parent
-                                text: "✕"
-                                color: zoneFermer.containsMouse ? hub.cAccent : hub.cDiscret
-                                font.pixelSize: 15
-                            }
-                            MouseArea {
-                                id: zoneFermer
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                onClicked: ligne.modelData.close()
-                            }
-                        }
+                    // Titre de groupe : « Bureau 2 », au premier élément de chaque bureau
+                    Text {
+                        visible: ligne.nouveauBureau
+                        text: hub.nomBureau(ligne.modelData.bureau) || "Fenêtres ouvertes"
+                        color: hub.cDiscret
+                        font.family: hub.police
+                        font.pixelSize: 13
+                        Layout.leftMargin: 4
+                        Layout.topMargin: ligne.index === 0 ? 0 : 8
                     }
-                    MouseArea {
-                        id: zoneFenetre
-                        anchors.fill: parent
-                        anchors.rightMargin: 44
-                        hoverEnabled: true
-                        onClicked: {
-                            ligne.modelData.activate();
-                            hub.ouvert = false;
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 46
+                        radius: 10
+                        color: ligne.choisie ? hub.cCarteSurvol : (zoneFenetre.containsMouse ? hub.cCarte : "transparent")
+                        border.width: ligne.choisie ? 2 : 0
+                        border.color: hub.cAccent
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 12
+                            anchors.rightMargin: 8
+                            spacing: 12
+                            Image {
+                                Layout.preferredWidth: 24
+                                Layout.preferredHeight: 24
+                                source: hub.chemin(ligne.entree ? ligne.entree.icon : ligne.fenetre.appId)
+                                sourceSize.width: 24
+                                sourceSize.height: 24
+                            }
+                            Text {
+                                text: ligne.fenetre.title || ligne.fenetre.appId
+                                color: ligne.fenetre.activated ? hub.cTexte : hub.cDiscret
+                                font.family: hub.police
+                                font.pixelSize: 14
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                            // Bouton fermer : un clic ferme l'application
+                            Bouton {
+                                glyphe: "✕"
+                                survol: "#5a2a24"
+                                z: 2
+                                onClic: ligne.fenetre.close()
+                            }
+                        }
+                        MouseArea {
+                            id: zoneFenetre
+                            anchors.fill: parent
+                            anchors.rightMargin: 44
+                            hoverEnabled: true
+                            onClicked: {
+                                ligne.fenetre.activate();
+                                hub.ouvert = false;
+                            }
                         }
                     }
                 }
@@ -500,7 +723,9 @@ PanelWindow {
         Text {
             Layout.topMargin: 10
             Layout.alignment: Qt.AlignHCenter
-            text: "Échap pour fermer · ↑ ↓ puis Entrée dans les résultats"
+            text: hub.enRecherche
+                ? "↑ ↓ puis Entrée · Échap pour fermer"
+                : "Flèches pour naviguer · Entrée pour ouvrir · Suppr ferme la fenêtre choisie · Échap"
             color: hub.cDiscret
             font.family: hub.police
             font.pixelSize: 11

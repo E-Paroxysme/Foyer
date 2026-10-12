@@ -9,6 +9,7 @@ gnome-disk-utility
 evince
 imv
 mpv
+mpv-mpris          # mpv visible dans le lecteur de musique du hub
 mat2
 aur:bibata-cursor-theme-bin
 flatpak:me.proton.Mail

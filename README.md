@@ -3,9 +3,9 @@
 Un bureau Arch Linux + Hyprland installé en une commande, pensé autour d'un point
 d'entrée unique (la touche Super) et du respect de la vie privée.
 
-**Version 0.3** : système de base, pilotes, logiciels, réglages de vie privée,
-Hyprland configuré, instantanés Btrfs, et **première version du hub** (touche
-Super). La pastille arrivera ensuite ; mako affiche les notifications en attendant.
+**Version 0.4** : système de base, pilotes, logiciels, réglages de vie privée,
+Hyprland configuré, instantanés Btrfs, et **hub v2** (touche
+Super : recherche, tuiles, lecteur de musique, fenêtres par bureau, tout au clavier). La pastille arrivera ensuite ; mako affiche les notifications en attendant.
 
 ## Installation
 
@@ -76,7 +76,8 @@ lance tout seul après la connexion.
 
 | Raccourci | Action |
 | --- | --- |
-| Super (seul) | Hub : recherche, tuiles, fenêtres ouvertes (✕ pour fermer d'un clic) |
+| Super (seul) | Hub : recherche, tuiles, musique, fenêtres ouvertes par bureau (✕ pour fermer d'un clic) |
+| Dans le hub | Flèches pour naviguer, Entrée pour ouvrir, Suppr pour fermer la fenêtre choisie, Échap |
 | Super + Espace | Lanceur de secours (fuzzel) |
 | Super + Entrée | Terminal |
 | Super + B | Navigateur (LibreWolf) |
@@ -107,7 +108,8 @@ sauvegardée dans `~/.local/state/foyer/` puis remplacée), et la commande
 `bash ~/.local/share/foyer/bin/foyer update`.
 
 Tuiles du hub : modifie `~/.config/foyer/tuiles.json` (jamais écrasé) ; le hub
-relit le fichier tout seul.
+relit le fichier tout seul. Pour masquer le lecteur de musique :
+`"widgets": { "musique": false }`.
 
 Fond d'écran : remplace `~/.config/foyer/fond.jpg` par l'image de ton choix.
 
