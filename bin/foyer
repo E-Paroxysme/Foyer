@@ -89,7 +89,13 @@ case "$cmd" in
     ;;
   update)
     verifier_prerequis
-    mettre_a_jour_depot
+    if [[ -z "${FOYER_RELANCE:-}" ]]; then
+      mettre_a_jour_depot
+      # La commande foyer elle-même vient peut-être d'être mise à jour : on relance
+      # la nouvelle version pour que tout le reste s'exécute avec le code à jour.
+      export FOYER_RELANCE=1
+      exec bash "$FOYER_DIR/bin/foyer" "$@"
+    fi
     if [[ -n "${2:-}" ]]; then
       f="$(lister_modules | grep -E "/[0-9]{2}-$2\.sh$" || true)"
       [[ -n "$f" ]] || erreur "Module inconnu : $2 (voir : foyer modules)"
