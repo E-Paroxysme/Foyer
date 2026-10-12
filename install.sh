@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Foyer — script d'amorçage.
 # Usage, sur une Arch fraîchement installée, connecté en utilisateur (pas root) :
-#   curl -fsSL https://raw.githubusercontent.com/<compte>/foyer/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/E-Paroxysme/Foyer/main/install.sh | bash
 # Variables optionnelles :
 #   FOYER_DEPOT   URL du dépôt Git (défaut : celle ci-dessous)
 #   FOYER_BRANCHE branche à utiliser (défaut : main)
 set -euo pipefail
 
-FOYER_DEPOT="${FOYER_DEPOT:-https://github.com/CHANGER-MOI/foyer.git}"
+FOYER_DEPOT="${FOYER_DEPOT:-https://github.com/E-Paroxysme/Foyer.git}"
 FOYER_BRANCHE="${FOYER_BRANCHE:-main}"
 FOYER_DIR="${FOYER_DIR:-$HOME/.local/share/foyer}"
 
@@ -31,6 +31,11 @@ else
   git clone --branch "$FOYER_BRANCHE" "$FOYER_DEPOT" "$FOYER_DIR"
 fi
 
+# Un dépôt envoyé par l'interface web de GitHub perd les droits d'exécution :
+# on les remet, et on dit à Git de ne pas considérer ça comme une modification.
+git -C "$FOYER_DIR" config core.fileMode false
+chmod +x "$FOYER_DIR/install.sh" "$FOYER_DIR/bin/foyer" "$FOYER_DIR"/modules/*.sh
+
 # Le script est souvent lancé via « curl | bash » : on rattache le clavier
 # pour que sudo puisse demander le mot de passe.
-exec "$FOYER_DIR/bin/foyer" install </dev/tty
+exec bash "$FOYER_DIR/bin/foyer" install </dev/tty

@@ -23,7 +23,10 @@ les deux fonctionnent.
 
 ### 3. Se connecter à Internet
 
-Câble : rien à faire. Wi-Fi :
+Câble Ethernet : rien à faire, c'est le plus simple. Wi-Fi : vérifie d'abord que
+l'**interrupteur sans fil** du ThinkPad (sur la tranche) est sur « marche »,
+puis vérifie que la carte n'est pas bloquée avec `rfkill list` (sinon :
+`rfkill unblock wifi`). Ensuite :
 
 ```
 iwctl
@@ -50,7 +53,7 @@ Choix à faire :
 | Utilisateur | ton utilisateur, avec les droits sudo |
 | Profil | **Minimal** (pas de bureau : Foyer s'en charge) |
 | Audio | PipeWire |
-| Réseau | NetworkManager |
+| Réseau | **NetworkManager** (« Use NetworkManager ») : sans ça, pas de réseau après le redémarrage |
 | Fuseau horaire | Europe/Paris |
 
 Lance l'installation, puis redémarre et retire la clé.
@@ -60,7 +63,7 @@ Lance l'installation, puis redémarre et retire la clé.
 Connecte-toi avec ton utilisateur. Si tu es en Wi-Fi : `nmtui`. Puis :
 
 ```
-curl -fsSL https://raw.githubusercontent.com/<compte>/foyer/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/E-Paroxysme/Foyer/main/install.sh | bash
 ```
 
 Compte 20 à 60 minutes selon la connexion. Redémarre à la fin : Hyprland se
