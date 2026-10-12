@@ -75,7 +75,7 @@ mettre_a_jour_depot() {
   branche="$(git -C "$FOYER_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
   [[ "$branche" == "HEAD" ]] && branche=main
   if ! git -C "$FOYER_DIR" fetch --quiet origin "$branche"; then
-    avertir "Dépôt injoignable, on continue avec la version locale."
+    avertir "ÉCHEC : impossible de récupérer la nouvelle version (réseau ou GitHub). Rien n'a été mis à jour côté Foyer."
     return 0
   fi
   # Ce dossier n'appartient qu'à Foyer (tes réglages sont dans ~/.config) : on
@@ -127,6 +127,11 @@ installer_commande() {
   rm -f "$tmp"
 }
 
+version_courte() {
+  git -C "$FOYER_DIR" log -1 --format='Foyer %h du %cd' --date=format:'%d/%m/%Y %H:%M' 2>/dev/null \
+    || echo "Foyer (version inconnue)"
+}
+
 cmd="${1:-aide}"
 case "$cmd" in
   install)
@@ -155,11 +160,10 @@ case "$cmd" in
       lancer_tous
     fi
     lancer_migrations
-    succes "Mise à jour terminée."
+    succes "Mise à jour terminée — $(version_courte)"
     ;;
-  version)
-    git -C "$FOYER_DIR" log -1 --format='Foyer %h du %cd — %s' --date=format:'%d/%m/%Y %H:%M' 2>/dev/null \
-      || echo "Foyer (version inconnue)"
+  version|-v|--version)
+    version_courte
     ;;
   modules)
     for f in $(lister_modules); do echo "  $(nom_module "$f")"; done
@@ -182,7 +186,12 @@ case "$cmd" in
     grep -qxF "$2" "$FOYER_CONFIG/foyer/groupes" 2>/dev/null || echo "$2" >>"$FOYER_CONFIG/foyer/groupes"
     succes "Groupe « $2 » installé."
     ;;
-  *)
+  aide|-h|--help)
     sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    ;;
+  *)
+    printf 'Commande inconnue : « %s »\n\n' "$cmd" >&2
+    sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    exit 1
     ;;
 esac
