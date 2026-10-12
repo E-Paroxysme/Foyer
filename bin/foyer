@@ -8,7 +8,13 @@
 #   foyer installer <groupe> installe un groupe optionnel (ex. : foyer installer si)
 #   foyer version            affiche la version installée
 set -euo pipefail
-unset FOYER_RELAIS  # le garde-fou du relais ne doit pas se transmettre aux programmes lancés
+# Marqueurs internes de relance. Ils valent le numéro du processus qui les a posés :
+# une valeur héritée d'un autre programme (terminal ouvert depuis le hub, etc.) ne
+# correspond jamais au processus courant et est donc ignorée. On les retire aussitôt
+# de l'environnement pour qu'aucun programme lancé par Foyer n'en hérite.
+DEJA_RELANCE=""
+[[ "${FOYER_RELANCE:-}" == "$$" ]] && DEJA_RELANCE=1
+unset FOYER_RELANCE FOYER_RELAIS
 
 FOYER_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 export FOYER_DIR
@@ -101,8 +107,8 @@ contenu_relais() {
 # Relais Foyer (géré par Foyer, réécrit à chaque mise à jour)
 F="$FOYER_DIR"
 # Garde-fou : si le relais se rappelle lui-même, on s'arrête au lieu de boucler.
-[ -n "\$FOYER_RELAIS" ] && { echo "Foyer : boucle détectée, lance : bash \$F/bin/foyer update" >&2; exit 1; }
-export FOYER_RELAIS=1
+[ "\$FOYER_RELAIS" = "\$\$" ] && { echo "Foyer : boucle détectée, lance : bash \$F/bin/foyer update" >&2; exit 1; }
+export FOYER_RELAIS=\$\$
 if ! grep -q '^lancer_tous()' "\$F/bin/foyer" 2>/dev/null; then
   echo "Foyer : programme abîmé, réparation automatique…" >&2
   git -C "\$F" checkout -- bin/foyer 2>/dev/null \\
@@ -143,12 +149,12 @@ case "$cmd" in
     ;;
   update)
     verifier_prerequis
-    if [[ -z "${FOYER_RELANCE:-}" ]]; then
+    if [[ -z "$DEJA_RELANCE" ]]; then
       mettre_a_jour_depot
       installer_commande
       # La commande foyer elle-même vient peut-être d'être mise à jour : on relance
       # la nouvelle version pour que tout le reste s'exécute avec le code à jour.
-      export FOYER_RELANCE=1
+      export FOYER_RELANCE=$$   # « exec » garde le même numéro de processus
       exec bash "$FOYER_DIR/bin/foyer" "$@"
     fi
     if [[ -n "${2:-}" ]]; then
