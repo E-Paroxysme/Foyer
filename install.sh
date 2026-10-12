@@ -24,7 +24,9 @@ fi
 
 if [[ -d "$FOYER_DIR/.git" ]]; then
   info "Dépôt déjà présent, mise à jour…"
-  git -C "$FOYER_DIR" pull --ff-only
+  git -C "$FOYER_DIR" fetch --quiet origin "$FOYER_BRANCHE"
+  git -C "$FOYER_DIR" checkout --quiet -B "$FOYER_BRANCHE" "origin/$FOYER_BRANCHE"
+  git -C "$FOYER_DIR" reset --quiet --hard "origin/$FOYER_BRANCHE"
 else
   info "Récupération de Foyer dans $FOYER_DIR…"
   mkdir -p "$(dirname "$FOYER_DIR")"

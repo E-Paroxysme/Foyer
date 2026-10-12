@@ -6,7 +6,9 @@
 #   foyer modules            liste les modules disponibles
 #   foyer groupes            liste les groupes de logiciels optionnels
 #   foyer installer <groupe> installe un groupe optionnel (ex. : foyer installer si)
+#   foyer version            affiche la version installée
 set -euo pipefail
+unset FOYER_RELAIS  # le garde-fou du relais ne doit pas se transmettre aux programmes lancés
 
 FOYER_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
 export FOYER_DIR
@@ -67,24 +69,61 @@ lancer_migrations() {
 }
 
 mettre_a_jour_depot() {
-  if [[ -d "$FOYER_DIR/.git" ]]; then
-    info "Mise à jour du dépôt Foyer…"
-    git -C "$FOYER_DIR" pull --ff-only || avertir "Mise à jour du dépôt impossible, on continue avec la version locale."
+  [[ -d "$FOYER_DIR/.git" ]] || return 0
+  info "Mise à jour du dépôt Foyer…"
+  local branche
+  branche="$(git -C "$FOYER_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
+  [[ "$branche" == "HEAD" ]] && branche=main
+  if ! git -C "$FOYER_DIR" fetch --quiet origin "$branche"; then
+    avertir "Dépôt injoignable, on continue avec la version locale."
+    return 0
   fi
+  # Ce dossier n'appartient qu'à Foyer (tes réglages sont dans ~/.config) : on
+  # l'aligne exactement sur la version publiée. Une modification locale ou un
+  # fichier abîmé ne peut donc plus bloquer une mise à jour. Par prudence, les
+  # modifications locales éventuelles sont sauvegardées dans le journal d'état.
+  if ! git -C "$FOYER_DIR" diff --quiet HEAD 2>/dev/null; then
+    local sauvegarde
+    sauvegarde="$FOYER_ETAT/modifs-locales-$(date +%F-%H%M%S).diff"
+    git -C "$FOYER_DIR" diff HEAD >"$sauvegarde" 2>/dev/null || true
+    avertir "Modifications locales du dépôt remplacées (copie : $sauvegarde)"
+  fi
+  git -C "$FOYER_DIR" reset --quiet --hard "origin/$branche" \
+    || avertir "Alignement du dépôt impossible, on continue avec la version locale."
+  git -C "$FOYER_DIR" config core.fileMode false
+}
+
+# Contenu du relais /usr/local/bin/foyer. Il passe par « bash » (marche même sans
+# droit d'exécution) et se répare tout seul si bin/foyer a été abîmé.
+contenu_relais() {
+  cat <<EOF
+#!/bin/sh
+# Relais Foyer (géré par Foyer, réécrit à chaque mise à jour)
+F="$FOYER_DIR"
+# Garde-fou : si le relais se rappelle lui-même, on s'arrête au lieu de boucler.
+[ -n "\$FOYER_RELAIS" ] && { echo "Foyer : boucle détectée, lance : bash \$F/bin/foyer update" >&2; exit 1; }
+export FOYER_RELAIS=1
+if ! grep -q '^lancer_tous()' "\$F/bin/foyer" 2>/dev/null; then
+  echo "Foyer : programme abîmé, réparation automatique…" >&2
+  git -C "\$F" checkout -- bin/foyer 2>/dev/null \\
+    || { git -C "\$F" fetch -q origin && git -C "\$F" reset -q --hard origin/main; }
+fi
+exec bash "\$F/bin/foyer" "\$@"
+EOF
 }
 
 installer_commande() {
-  # Rend « foyer » disponible partout. Un petit script relais plutôt qu'un lien :
-  # il passe par « bash », donc il marche même si le fichier a perdu ses droits
-  # d'exécution (cas d'un envoi par l'interface web de GitHub).
-  # Attention : l'ancienne version était un lien vers bin/foyer ; écrire « à travers »
-  # ce lien écraserait bin/foyer lui-même. On supprime donc d'abord l'existant, et on
-  # écrit dans un fichier temporaire avant de le mettre en place.
-  local tmp
+  # Rend « foyer » disponible partout via un petit script relais.
+  # Jamais d'écriture « à travers » l'existant (une ancienne version était un lien
+  # vers bin/foyer : écrire dedans écrasait bin/foyer). On supprime, puis on pose
+  # un fichier neuf, et seulement si le contenu a changé.
+  local cible=/usr/local/bin/foyer tmp
   tmp="$(mktemp)"
-  printf '#!/bin/sh\nexec bash "%s/bin/foyer" "$@"\n' "$FOYER_DIR" >"$tmp"
-  sudo rm -f /usr/local/bin/foyer
-  sudo install -m 755 "$tmp" /usr/local/bin/foyer
+  contenu_relais >"$tmp"
+  if [[ -L "$cible" ]] || ! cmp -s "$tmp" "$cible"; then
+    sudo rm -f "$cible"
+    sudo install -m 755 "$tmp" "$cible"
+  fi
   rm -f "$tmp"
 }
 
@@ -118,6 +157,10 @@ case "$cmd" in
     lancer_migrations
     succes "Mise à jour terminée."
     ;;
+  version)
+    git -C "$FOYER_DIR" log -1 --format='Foyer %h du %cd — %s' --date=format:'%d/%m/%Y %H:%M' 2>/dev/null \
+      || echo "Foyer (version inconnue)"
+    ;;
   modules)
     for f in $(lister_modules); do echo "  $(nom_module "$f")"; done
     ;;
@@ -140,6 +183,6 @@ case "$cmd" in
     succes "Groupe « $2 » installé."
     ;;
   *)
-    sed -n '2,8p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     ;;
 esac

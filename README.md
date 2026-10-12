@@ -97,7 +97,14 @@ foyer update vie-privee  # un seul module
 foyer modules            # liste des modules
 foyer groupes            # groupes de logiciels optionnels (✔ = installé)
 foyer installer si       # ajoute un groupe plus tard
+foyer version            # version installée
 ```
+
+La mise à jour se répare seule : le dossier `~/.local/share/foyer` est toujours
+réaligné sur la version publiée (une modification faite à la main dedans est
+sauvegardée dans `~/.local/state/foyer/` puis remplacée), et la commande
+`foyer` restaure son propre programme s'il a été abîmé. En dernier recours :
+`bash ~/.local/share/foyer/bin/foyer update`.
 
 Tuiles du hub : modifie `~/.config/foyer/tuiles.json` (jamais écrasé) ; le hub
 relit le fichier tout seul.
