@@ -7,6 +7,7 @@
     { "id": "terminal",   "nom": "Terminal",      "icone": "", "description": "Terminal foot",                      "action": { "type": "app", "cible": "foot" } },
     { "id": "mail",       "nom": "Proton Mail",   "icone": "", "description": "Messagerie chiffrée",                "action": { "type": "app", "cible": "me.proton.Mail" } },
     { "id": "pass",       "nom": "Proton Pass",   "icone": "", "description": "Gestionnaire de mots de passe",      "action": { "type": "app", "cible": "me.proton.Pass" } },
-    { "id": "maj",        "nom": "Mettre à jour", "icone": "⟳", "description": "Mise à jour du système et de Foyer", "action": { "type": "commande", "cible": "uwsm app -- foot -e sh -c 'foyer update; echo; read -p \"Entrée pour fermer\"'" } }
+    { "id": "maj",        "nom": "Mettre à jour", "icone": "⟳", "description": "Mise à jour du système et de Foyer", "action": { "type": "commande", "cible": "uwsm app -- foot -e sh -c 'foyer update; echo; read -p \"Entrée pour fermer\"'" } },
+    { "id": "rollback",   "nom": "Version précédente", "icone": "↶", "description": "Revenir à la version précédente de Foyer", "action": { "type": "commande", "cible": "uwsm app -- foot -e sh -c 'foyer rollback; echo; read -p \"Entrée pour fermer\"'" } }
   ]
 }

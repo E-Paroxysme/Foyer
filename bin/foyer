@@ -7,6 +7,9 @@
 #   foyer groupes            liste les groupes de logiciels optionnels
 #   foyer installer <groupe> installe un groupe optionnel (ex. : foyer installer si)
 #   foyer version            affiche la version installée
+#   foyer history            liste les versions installées sur cet ordinateur
+#   foyer rollback           revient à la version précédente de Foyer
+#   foyer rollback <version> revient à une version précise (voir : foyer history)
 set -euo pipefail
 # Marqueurs internes de relance. Ils valent le numéro du processus qui les a posés :
 # une valeur héritée d'un autre programme (terminal ouvert depuis le hub, etc.) ne
@@ -133,6 +136,117 @@ installer_commande() {
   rm -f "$tmp"
 }
 
+# --- Historique des versions installées --------------------------------------
+# Une ligne par version installée avec succès (identifiant git complet), dans
+# l'ordre. Sert à « foyer rollback » pour savoir quelle était la version d'avant.
+FOYER_HISTORIQUE="$FOYER_ETAT/versions"
+
+version_actuelle() { git -C "$FOYER_DIR" rev-parse HEAD 2>/dev/null; }
+
+noter_version() {
+  local v
+  v="$(version_actuelle)" || return 0
+  [[ "$(tail -n1 "$FOYER_HISTORIQUE" 2>/dev/null)" == "$v" ]] || echo "$v" >>"$FOYER_HISTORIQUE"
+}
+
+decrire_version() {
+  git -C "$FOYER_DIR" log -1 --format='%h  %cd  %s' --date=format:'%d/%m/%Y %H:%M' "$1" 2>/dev/null \
+    || echo "${1:0:7}  (version inconnue du dépôt)"
+}
+
+# Version d'avant : l'entrée de l'historique qui précède la version actuelle
+# (plusieurs « rollback » d'affilée remontent donc pas à pas). Sans historique
+# exploitable, la version publiée juste avant dans le dépôt.
+version_precedente() {
+  local actuelle precedente="" v
+  actuelle="$(version_actuelle)"
+  if [[ -f "$FOYER_HISTORIQUE" ]]; then
+    while read -r v; do
+      [[ "$v" == "$actuelle" ]] && break
+      precedente="$v"
+    done <"$FOYER_HISTORIQUE"
+    # Version actuelle absente de l'historique : on prend la dernière notée.
+    grep -qxF "$actuelle" "$FOYER_HISTORIQUE" || precedente="$(tail -n1 "$FOYER_HISTORIQUE")"
+    [[ "$precedente" == "$actuelle" ]] && precedente=""
+  fi
+  [[ -n "$precedente" ]] || precedente="$(git -C "$FOYER_DIR" rev-parse HEAD~1 2>/dev/null || true)"
+  echo "$precedente"
+}
+
+afficher_historique() {
+  local actuelle v
+  actuelle="$(version_actuelle)"
+  if [[ ! -s "$FOYER_HISTORIQUE" ]]; then
+    info "Aucun historique pour l'instant (il se remplit à chaque mise à jour)."
+    echo "  → $(decrire_version HEAD)   (actuelle)"
+    return 0
+  fi
+  echo "Versions installées sur cet ordinateur (la plus récente en bas) :"
+  tail -n 15 "$FOYER_HISTORIQUE" | while read -r v; do
+    if [[ "$v" == "$actuelle" ]]; then
+      echo "  → $(decrire_version "$v")   (actuelle)"
+    else
+      echo "    $(decrire_version "$v")"
+    fi
+  done
+  echo
+  echo "Revenir à une version : foyer rollback <les 7 premiers caractères>"
+}
+
+# Relance les modules sauf la mise à jour du système (Arch) : un retour en arrière
+# ne concerne que Foyer. Les paquets système, eux, ont les instantanés Btrfs.
+lancer_sans_depots() {
+  local liste
+  mapfile -t liste < <(lister_modules | grep -v -- '-depots\.sh$')
+  preparer_progression "${liste[@]}"
+  for f in "${liste[@]}"; do lancer_module "$f"; done
+  barre 100 "Terminé"
+}
+
+retour_arriere() {
+  local cible="${1:-}" confirmer="${2:-}" actuelle reponse
+  [[ "$cible" == "-y" ]] && { cible="${2:-}"; confirmer="-y"; }
+  [[ -d "$FOYER_DIR/.git" ]] || erreur "Le dossier Foyer n'est pas un dépôt Git : retour impossible."
+  actuelle="$(version_actuelle)"
+  if [[ -z "$cible" ]]; then
+    cible="$(version_precedente)"
+    [[ -n "$cible" ]] || erreur "Aucune version précédente connue."
+  else
+    # Version inconnue en local (jamais téléchargée) : on tente de la récupérer.
+    git -C "$FOYER_DIR" cat-file -e "$cible^{commit}" 2>/dev/null \
+      || git -C "$FOYER_DIR" fetch --quiet origin 2>/dev/null || true
+    cible="$(git -C "$FOYER_DIR" rev-parse --verify --quiet "$cible^{commit}")" \
+      || erreur "Version inconnue : $1 (voir : foyer history)"
+  fi
+  [[ "$cible" != "$actuelle" ]] || erreur "Cette version est déjà celle installée."
+
+  etape "Retour en arrière de Foyer"
+  echo "  Actuelle : $(decrire_version "$actuelle")"
+  echo "  Cible    : $(decrire_version "$cible")"
+  echo
+  echo "  Seuls Foyer et ses fichiers de config changent. Tes fichiers personnels"
+  echo "  (~/.config/foyer : tuiles, perso.lua, fond d'écran) ne sont pas touchés."
+  if [[ "$confirmer" != "-y" ]]; then
+    read -r -p "  Continuer ? [o/N] " reponse </dev/tty || reponse=""
+    [[ "$reponse" =~ ^[oOyY]$ ]] || { info "Annulé, rien n'a changé."; exit 0; }
+  fi
+
+  verifier_prerequis
+  git -C "$FOYER_DIR" reset --quiet --hard "$cible" || erreur "Impossible de revenir à cette version."
+  _ecrire "rollback $actuelle -> $cible"
+  # Les modules de la version cible redéploient ses configs. La commande en cours
+  # reste celle d'aujourd'hui (déjà chargée), qui sait revenir en avant ensuite.
+  lancer_sans_depots
+  installer_commande
+  succes "Retour terminé — $(version_courte)"
+  echo "  Pour revenir à la dernière version : foyer update"
+  if grep -q '^retour_arriere()' "$FOYER_DIR/bin/foyer"; then
+    echo "  Pour remonter encore d'une version : foyer rollback"
+  else
+    echo "  (Cette version est antérieure à « foyer rollback » : pour aller plus loin, foyer update puis foyer rollback <version>.)"
+  fi
+}
+
 version_courte() {
   git -C "$FOYER_DIR" log -1 --format='Foyer %h du %cd' --date=format:'%d/%m/%Y %H:%M' 2>/dev/null \
     || echo "Foyer (version inconnue)"
@@ -145,6 +259,7 @@ case "$cmd" in
     installer_commande
     lancer_tous
     lancer_migrations
+    noter_version
     succes "Installation terminée. Redémarre l'ordinateur : sudo reboot"
     ;;
   update)
@@ -166,7 +281,14 @@ case "$cmd" in
       lancer_tous
     fi
     lancer_migrations
+    noter_version
     succes "Mise à jour terminée — $(version_courte)"
+    ;;
+  rollback)
+    retour_arriere "${2:-}" "${3:-}"
+    ;;
+  history)
+    afficher_historique
     ;;
   version|-v|--version)
     version_courte
@@ -193,11 +315,11 @@ case "$cmd" in
     succes "Groupe « $2 » installé."
     ;;
   aide|-h|--help)
-    sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     ;;
   *)
     printf 'Commande inconnue : « %s »\n\n' "$cmd" >&2
-    sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit 1
     ;;
 esac

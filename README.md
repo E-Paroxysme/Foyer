@@ -99,7 +99,16 @@ foyer modules            # liste des modules
 foyer groupes            # groupes de logiciels optionnels (✔ = installé)
 foyer installer si       # ajoute un groupe plus tard
 foyer version            # version installée
+foyer history            # versions installées sur cet ordinateur
+foyer rollback           # revient à la version précédente de Foyer
+foyer rollback 2d72f49   # revient à une version précise
 ```
+
+`foyer rollback` (ou la tuile « Version précédente ») remet Foyer et ses fichiers
+de config sur la version d'avant ; tes fichiers de `~/.config/foyer` ne sont pas
+touchés. Plusieurs `rollback` d'affilée remontent pas à pas ; `foyer update`
+revient à la dernière version. Les logiciels d'Arch, eux, se restaurent avec les
+instantanés Btrfs (voir plus bas).
 
 La mise à jour se répare seule : le dossier `~/.local/share/foyer` est toujours
 réaligné sur la version publiée (une modification faite à la main dedans est
