@@ -32,6 +32,8 @@ hl.config({
 require("ecrans")
 require("entrees")
 require("apparence")
+-- Couleurs, bordures et arrondis du thème (produit par « foyer theme »)
+pcall(require, "theme")
 require("raccourcis")
 require("demarrage")
 

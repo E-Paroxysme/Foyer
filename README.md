@@ -3,9 +3,20 @@
 Un bureau Arch Linux + Hyprland installé en une commande, pensé autour d'un point
 d'entrée unique (la touche Super) et du respect de la vie privée.
 
-**Version 0.4** : système de base, pilotes, logiciels, réglages de vie privée,
-Hyprland configuré, instantanés Btrfs, et **hub v2** (touche
-Super : recherche, tuiles, lecteur de musique, fenêtres par bureau, tout au clavier). La pastille arrivera ensuite ; mako affiche les notifications en attendant.
+**Version 0.5** : système de base, pilotes, logiciels, réglages de vie privée,
+instantanés Btrfs, et la nouvelle identité visuelle « braise » :
+
+- **hub v3** (touche Super) : panneau flottant, recherche qui ouvre ses résultats
+  (calcul, applications, tuiles, fenêtres, fichiers, web), tuiles, lecteur de
+  musique avec égaliseur, fenêtres par bureau, calendrier (clic sur la date) ;
+- **pastille** en bas au centre : notifications et historique, témoins micro /
+  caméra / partage d'écran, volume, luminosité, batterie faible ;
+- **thème unique** pour tout le bureau (fenêtres, terminal, lanceur, écran de
+  verrouillage, applications GTK) ;
+- écran de verrouillage avec ton fond d'écran et l'icône du compte.
+
+Si le hub ou la pastille rencontrent une erreur, une version de secours prend
+le relais (hub simple, notifications par mako).
 
 ## Installation
 
@@ -78,6 +89,8 @@ lance tout seul après la connexion.
 | --- | --- |
 | Super (seul) | Hub : recherche, tuiles, musique, fenêtres ouvertes par bureau (✕ pour fermer d'un clic) |
 | Dans le hub | Flèches pour naviguer, Entrée pour ouvrir, Suppr pour fermer la fenêtre choisie, Échap |
+| Clic sur la date du hub | Calendrier (← → pour changer de mois, Échap pour revenir) |
+| Clic sur la pastille | Historique des notifications |
 | Super + Espace | Lanceur de secours (fuzzel) |
 | Super + Entrée | Terminal |
 | Super + B | Navigateur (LibreWolf) |
@@ -98,6 +111,7 @@ foyer update vie-privee  # un seul module
 foyer modules            # liste des modules
 foyer groupes            # groupes de logiciels optionnels (✔ = installé)
 foyer installer si       # ajoute un groupe plus tard
+foyer theme              # applique ~/.config/foyer/theme.json partout
 foyer version            # version installée
 foyer history            # versions installées sur cet ordinateur
 foyer rollback           # revient à la version précédente de Foyer
@@ -117,8 +131,22 @@ sauvegardée dans `~/.local/state/foyer/` puis remplacée), et la commande
 `bash ~/.local/share/foyer/bin/foyer update`.
 
 Tuiles du hub : modifie `~/.config/foyer/tuiles.json` (jamais écrasé) ; le hub
-relit le fichier tout seul. Pour masquer le lecteur de musique :
-`"widgets": { "musique": false }`.
+relit le fichier tout seul.
+
+Disposition du hub : `~/.config/foyer/disposition.json` (jamais écrasé, relu tout
+seul) : en-tête `compacte`, `ligne` ou `centree` ; bureaux `titres`, `segments`
+ou `badges` ; égaliseur `colonnes` ou `aucun` ; widgets à afficher.
+
+Thème : `~/.config/foyer/theme.json` (jamais écrasé). Mets-y seulement ce que tu
+veux changer, avec les noms du thème par défaut
+(`~/.local/share/foyer/defaults/foyer/theme.json`), puis `foyer theme`. Exemple :
+
+```json
+{ "couleurs": { "accent": "#5aa0e8" } }
+```
+
+Icône du compte (écran de verrouillage) : une image carrée dans `~/.face`, puis
+`foyer theme`. Sans elle, un rond aux couleurs du thème.
 
 Fond d'écran : remplace `~/.config/foyer/fond.jpg` par l'image de ton choix.
 

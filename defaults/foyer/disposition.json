@@ -1,0 +1,10 @@
+{
+  "description": "Disposition du hub. Ce fichier t'appartient : il n'est jamais écrasé. Le hub le relit tout seul. entete : compacte | ligne | centree. bureaux : titres | segments | badges. visualiseur : colonnes | aucun. widgets : true pour afficher, false pour masquer.",
+  "entete": "compacte",
+  "bureaux": "titres",
+  "visualiseur": "colonnes",
+  "widgets": {
+    "musique": true,
+    "fenetres": true
+  }
+}

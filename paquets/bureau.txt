@@ -1,4 +1,4 @@
-# Bureau Hyprland et briques temporaires (remplacées plus tard par le hub et la pastille).
+# Bureau Hyprland et briques de base.
 hyprland
 uwsm
 xdg-desktop-portal-hyprland
@@ -19,9 +19,13 @@ brightnessctl
 playerctl
 libnotify
 
-# Briques temporaires
-fuzzel        # lanceur, en attendant le hub
-mako          # notifications, en attendant la pastille
+# Secours
+fuzzel        # lanceur de secours (Super + Espace)
+mako          # notifications de secours, si la pastille ne démarre pas
+
+# Thème et hub
+imagemagick   # image de l'écran de verrouillage
+aur:cava      # égaliseur du lecteur de musique
 
 # Terminal et outils
 foot
@@ -44,6 +48,8 @@ noto-fonts-emoji
 noto-fonts-cjk
 ttf-jetbrains-mono-nerd
 inter-font
+aur:ttf-geist           # police de l'interface (Geist)
+otf-geist-mono-nerd     # police du terminal (Geist Mono)
 
-# Quickshell (base du futur hub)
+# Quickshell (hub et pastille)
 quickshell

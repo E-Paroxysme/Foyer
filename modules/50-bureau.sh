@@ -46,6 +46,11 @@ info "Hub Foyer (Quickshell)"
 for f in "$D"/quickshell/foyer/*; do
   deposer "$f" "$FOYER_CONFIG/quickshell/foyer/$(basename "$f")"
 done
+# Disposition du hub (en-tête, bureaux, widgets) : copiée une seule fois.
+if [[ ! -f "$FOYER_CONFIG/foyer/disposition.json" ]]; then
+  deposer "$D/foyer/disposition.json" "$FOYER_CONFIG/foyer/disposition.json"
+  info "Disposition du hub : ~/.config/foyer/disposition.json"
+fi
 # Tuiles : copiées une seule fois, ensuite le fichier t'appartient.
 if [[ ! -f "$FOYER_CONFIG/foyer/tuiles.json" ]]; then
   deposer "$D/foyer/tuiles.json" "$FOYER_CONFIG/foyer/tuiles.json"
@@ -63,16 +68,13 @@ fi
 # la nouvelle version tout de suite, sans attendre la prochaine connexion.
 if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
   pkill -x qs 2>/dev/null || true
+  # La pastille remplace mako pour les notifications (mako reste en secours).
+  pkill -x mako 2>/dev/null || true
   (setsid env -u FOYER_DIR -u FOYER_RELANCE -u FOYER_RELAIS uwsm app -s b -- qs -c foyer >/dev/null 2>&1 &) || true
   pkill -x swaybg 2>/dev/null || true
   (setsid env -u FOYER_DIR -u FOYER_RELANCE -u FOYER_RELAIS uwsm app -s b -- swaybg -m fill -i "$FOYER_CONFIG/foyer/fond.jpg" >/dev/null 2>&1 &) || true
   info "Hub et fond d'écran (re)lancés"
 fi
-
-info "Lanceur de secours (fuzzel), notifications temporaires (mako), terminal (foot)"
-deposer "$D/fuzzel/fuzzel.ini" "$FOYER_CONFIG/fuzzel/fuzzel.ini"
-deposer "$D/mako/config"       "$FOYER_CONFIG/mako/config"
-deposer "$D/foot/foot.ini"     "$FOYER_CONFIG/foot/foot.ini"
 
 info "Démarrage automatique de Hyprland après connexion sur le terminal 1"
 profil_bash="$HOME/.bash_profile"

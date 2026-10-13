@@ -1,4 +1,5 @@
--- Géré par Foyer. Apparence par défaut (le futur thème global remplacera ces valeurs).
+-- Géré par Foyer. Apparence de base. Couleurs, bordures, espaces et arrondis
+-- viennent du thème (theme.lua, chargé juste après, a le dernier mot).
 hl.config({
 	general = {
 		gaps_in = 4,

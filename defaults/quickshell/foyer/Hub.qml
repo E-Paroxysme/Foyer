@@ -1,7 +1,9 @@
 // Géré par Foyer. Le hub : un seul point d'entrée (touche Super).
-// v2 : heure et batterie, recherche d'applications et de tuiles, tuiles
-// personnalisables (~/.config/foyer/tuiles.json), lecteur de musique, fenêtres
-// ouvertes regroupées par bureau, navigation complète au clavier.
+// v3, d'après les maquettes validées : panneau flottant, en-tête au choix,
+// recherche qui pousse le contenu (calcul, applications, tuiles, fenêtres,
+// fichiers, web), tuiles aux icônes officielles, lecteur avec égaliseur,
+// fenêtres par bureau (3 dispositions), calendrier qui s'ouvre depuis la date.
+// Couleurs, police, arrondis : Theme.qml. Disposition : ~/.config/foyer/disposition.json.
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -16,27 +18,34 @@ PanelWindow {
     id: hub
 
     property bool ouvert: false
+    property string vue: "accueil"          // accueil | calendrier
     property var tuiles: []
+    property var disposition: ({})
     property var resultats: []
-    property int selection: 0     // résultat choisi (quand on cherche)
-    property int curseur: -1      // élément choisi sans recherche : tuiles puis fenêtres (-1 = aucun)
-    property bool afficherMusique: true
+    property var fichiers: []
+    property int selection: 0
+    property int curseur: -1                // sans recherche : tuiles puis fenêtres
+    property int segment: 0                 // disposition « segments » : 0 = tous
+    property bool cavaDispo: false
+    property var barres: []
     property date maintenant: new Date()
+    property int moisDecalage: 0
+    property date dateRef: new Date()
+    property int jourChoisi: 0
 
+    readonly property string home: Quickshell.env("HOME")
     readonly property bool enRecherche: recherche.text.length > 0
     readonly property int nbTuiles: tuiles.length
+    readonly property int colonnes: 7
     readonly property var fenetres: listerFenetres()
-    readonly property int colonnes: Math.max(1, Math.floor((contenu.width + 12) / 112))
+    readonly property var fenetresVisibles: segment === 0 ? fenetres : fenetres.filter(f => f.bureau === segment)
     readonly property var lecteur: lecteurActif()
-
-    // --- Palette (le futur thème global la remplacera) ---------------------
-    readonly property color cFond: "#d9111116"
-    readonly property color cCarte: "#1e1e26"
-    readonly property color cCarteSurvol: "#2a2a34"
-    readonly property color cTexte: "#f0ece6"
-    readonly property color cDiscret: "#9a948c"
-    readonly property color cAccent: "#e8875a"
-    readonly property string police: "Inter"
+    readonly property string entete: disposition.entete || "compacte"
+    readonly property string modeBureaux: disposition.bureaux || "titres"
+    readonly property bool afficherMusique: !disposition.widgets || disposition.widgets.musique !== false
+    readonly property bool afficherFenetres: !disposition.widgets || disposition.widgets.fenetres !== false
+    readonly property bool egaliseur: (disposition.visualiseur || "colonnes") === "colonnes"
+    readonly property int nbBarres: Theme.eco ? 12 : 24
 
     visible: ouvert
     color: "transparent"
@@ -54,9 +63,13 @@ PanelWindow {
     onOuvertChanged: {
         if (ouvert) {
             maintenant = new Date();
+            vue = "accueil";
+            moisDecalage = 0;
+            jourChoisi = 0;
             recherche.text = "";
             selection = 0;
             curseur = -1;
+            segment = 0;
             recherche.forceActiveFocus();
             try {
                 Hyprland.refreshToplevels();
@@ -64,28 +77,38 @@ PanelWindow {
         }
     }
 
-    // Une fenêtre fermée raccourcit la liste : le curseur reste dans les bornes.
     onFenetresChanged: {
-        const total = nbTuiles + fenetres.length;
+        const total = nbTuiles + (fenetresVisibles ? fenetresVisibles.length : 0);
         if (curseur >= total)
             curseur = total - 1;
     }
 
     // --- Données ------------------------------------------------------------
     FileView {
-        id: fichierTuiles
-        path: Quickshell.env("HOME") + "/.config/foyer/tuiles.json"
+        path: hub.home + "/.config/foyer/tuiles.json"
         watchChanges: true
         onFileChanged: reload()
         onLoaded: {
             try {
-                const donnees = JSON.parse(text());
-                hub.tuiles = Array.isArray(donnees) ? donnees : (donnees.tuiles || []);
-                const w = (donnees && donnees.widgets) || {};
-                hub.afficherMusique = w.musique !== false;
+                const d = JSON.parse(text());
+                hub.tuiles = Array.isArray(d) ? d : (d.tuiles || []);
             } catch (e) {
                 console.warn("tuiles.json illisible : " + e);
                 hub.tuiles = [];
+            }
+        }
+    }
+
+    FileView {
+        path: hub.home + "/.config/foyer/disposition.json"
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: {
+            try {
+                hub.disposition = JSON.parse(text());
+            } catch (e) {
+                console.warn("disposition.json illisible : " + e);
+                hub.disposition = {};
             }
         }
     }
@@ -97,6 +120,49 @@ PanelWindow {
         onTriggered: hub.maintenant = new Date()
     }
 
+    // Égaliseur : cava, seulement quand le hub est ouvert et qu'une musique joue.
+    Process {
+        running: true
+        command: ["sh", "-c", "command -v cava"]
+        onExited: code => hub.cavaDispo = code === 0
+    }
+    Process {
+        running: hub.ouvert && hub.cavaDispo && hub.egaliseur && hub.afficherMusique && hub.lecteur !== null && hub.lecteur.isPlaying
+        command: ["cava", "-p", hub.home + "/.config/foyer/cava.conf"]
+        stdout: SplitParser {
+            onRead: data => hub.barres = data.split(";").filter(x => x !== "").map(x => Math.min(1, parseInt(x) / 100))
+        }
+        onRunningChanged: if (!running) hub.barres = []
+    }
+
+    // Recherche de fichiers (fd), lancée un court instant après la frappe.
+    Process {
+        id: chercheFichiers
+        property var lignes: []
+        stdout: SplitParser {
+            onRead: data => chercheFichiers.lignes.push(data)
+        }
+        onExited: {
+            hub.fichiers = chercheFichiers.lignes.slice();
+            hub.resultats = hub.chercher(recherche.text);
+        }
+    }
+    Timer {
+        id: delaiFichiers
+        interval: 220
+        onTriggered: {
+            const q = recherche.text.trim();
+            chercheFichiers.running = false;
+            chercheFichiers.lignes = [];
+            if (q.length < 3) {
+                hub.fichiers = [];
+                return;
+            }
+            chercheFichiers.command = ["fd", "-i", "-F", "-t", "f", "--max-results", "4", "--max-depth", "6", q, hub.home];
+            chercheFichiers.running = true;
+        }
+    }
+
     // --- Fonctions ----------------------------------------------------------
     function normaliser(s) {
         let t = (s || "").toString().toLowerCase();
@@ -106,17 +172,31 @@ PanelWindow {
         return t;
     }
 
+    function calculer(q) {
+        const expr = q.replace(/,/g, ".").replace(/×/g, "*").replace(/÷/g, "/").replace(/\^/g, "**");
+        if (!/^[\d\s+\-*/().%]+$/.test(expr) || !/\d/.test(expr) || !/[+\-*/%]/.test(expr))
+            return null;
+        try {
+            const r = Function('"use strict"; return (' + expr + ');')();
+            if (typeof r !== "number" || !isFinite(r))
+                return null;
+            return Math.round(r * 1e10) / 1e10;
+        } catch (e) {
+            return null;
+        }
+    }
+
     function chercher(texte) {
-        const q = normaliser(texte.trim());
+        const brut = texte.trim();
+        const q = normaliser(brut);
         if (q.length === 0)
             return [];
-        const trouves = [];
-        for (const t of hub.tuiles) {
-            const n = normaliser(t.nom);
-            const d = normaliser(t.description);
-            if (n.includes(q) || d.includes(q))
-                trouves.push({ genre: "tuile", nom: t.nom, detail: t.description || "Tuile", icone: iconeTuile(t), donnee: t, score: n.startsWith(q) ? 0 : 1 });
-        }
+        const res = [];
+        const calcul = calculer(brut);
+        if (calcul !== null)
+            res.push({ genre: "calcul", groupe: "Calcul", nom: brut.replace(/\*/g, " × ") + " = " + String(calcul).replace(".", ","), detail: "Entrée pour copier", icone: "", valeur: String(calcul) });
+
+        const apps = [];
         for (const a of DesktopEntries.applications.values) {
             const n = normaliser(a.name);
             const g = normaliser(a.genericName);
@@ -126,13 +206,30 @@ PanelWindow {
             else if (n.includes(q)) score = 1;
             else if (g.includes(q) || k.includes(q)) score = 2;
             if (score >= 0)
-                trouves.push({ genre: "app", nom: a.name, detail: a.genericName || a.comment || "Application", icone: a.icon || "", donnee: a, score: score });
+                apps.push({ genre: "app", groupe: "Applications", nom: a.name, detail: a.genericName || a.comment || "", icone: a.icon || "", donnee: a, score: score });
         }
-        trouves.sort((x, y) => x.score - y.score || x.nom.localeCompare(y.nom));
-        return trouves.slice(0, 8);
+        apps.sort((x, y) => x.score - y.score || x.nom.localeCompare(y.nom));
+        res.push(...apps.slice(0, 4));
+
+        const tuilesTrouvees = hub.tuiles.filter(t => normaliser(t.nom).includes(q) || normaliser(t.description).includes(q)).slice(0, 3);
+        for (const t of tuilesTrouvees)
+            res.push({ genre: "tuile", groupe: "Tuiles", nom: t.nom, detail: t.description || "", icone: iconeTuile(t), donnee: t });
+
+        const fen = hub.fenetres.filter(f => normaliser(f.fenetre.title).includes(q) || normaliser(f.fenetre.appId).includes(q)).slice(0, 3);
+        for (const f of fen) {
+            const e = DesktopEntries.heuristicLookup(f.fenetre.appId);
+            res.push({ genre: "fenetre", groupe: "Fenêtres ouvertes", nom: f.fenetre.title || f.fenetre.appId, detail: f.bureau > 0 ? "Bureau " + f.bureau : "", icone: e ? e.icon : f.fenetre.appId, donnee: f.fenetre });
+        }
+
+        for (const chemin of hub.fichiers) {
+            const morceaux = chemin.split("/");
+            res.push({ genre: "fichier", groupe: "Fichiers", nom: morceaux[morceaux.length - 1], detail: chemin.replace(hub.home, "~").split("/").slice(0, -1).join("/"), icone: "text-x-generic", valeur: chemin });
+        }
+
+        res.push({ genre: "web", groupe: "Web", nom: "Rechercher « " + brut + " » sur le web", detail: "DuckDuckGo", icone: "", valeur: "https://duckduckgo.com/?q=" + encodeURIComponent(brut) });
+        return res;
     }
 
-    // Fenêtres ouvertes, avec leur bureau (via Hyprland), triées par bureau.
     function listerFenetres() {
         const hypr = Hyprland.toplevels ? Hyprland.toplevels.values : [];
         const liste = ToplevelManager.toplevels.values.map((t, i) => {
@@ -145,9 +242,17 @@ PanelWindow {
             }
             return { fenetre: t, bureau: bureau, ordre: i };
         });
-        const rang = b => (b > 0 ? b : 1000 - b);   // bureaux normaux d'abord, spéciaux et inconnus ensuite
+        const rang = b => (b > 0 ? b : 1000 - b);
         liste.sort((a, b) => rang(a.bureau) - rang(b.bureau) || a.ordre - b.ordre);
         return liste;
+    }
+
+    function bureauxOuverts() {
+        const ids = [];
+        for (const f of hub.fenetres)
+            if (f.bureau > 0 && !ids.includes(f.bureau))
+                ids.push(f.bureau);
+        return ids;
     }
 
     function nomBureau(b) {
@@ -155,10 +260,9 @@ PanelWindow {
             const actuel = Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id === b;
             return "Bureau " + b + (actuel ? " · actuel" : "");
         }
-        return b < 0 ? "Bureau spécial" : "";
+        return b < 0 ? "Bureau spécial" : "Fenêtres ouvertes";
     }
 
-    // Lecteur affiché : celui qui joue, sinon le premier trouvé.
     function lecteurActif() {
         const lecteurs = Mpris.players.values;
         for (const p of lecteurs)
@@ -207,27 +311,43 @@ PanelWindow {
     function activer(r) {
         if (!r)
             return;
-        if (r.genre === "app") lancerEntree(r.donnee);
-        else lancerTuile(r.donnee);
+        switch (r.genre) {
+        case "calcul":
+            executer(["wl-copy", r.valeur]);
+            break;
+        case "app":
+            lancerEntree(r.donnee);
+            break;
+        case "tuile":
+            lancerTuile(r.donnee);
+            break;
+        case "fenetre":
+            r.donnee.activate();
+            break;
+        case "fichier":
+        case "web":
+            executer(["xdg-open", r.valeur]);
+            break;
+        }
         hub.ouvert = false;
     }
 
-    // --- Navigation au clavier (sans recherche : tuiles, puis fenêtres) ------
+    // --- Clavier ------------------------------------------------------------
     function bas() {
         if (enRecherche) {
             selection = Math.min(selection + 1, resultats.length - 1);
             return;
         }
-        const nT = nbTuiles, nF = fenetres.length;
+        const nT = nbTuiles, nF = afficherFenetres ? fenetresVisibles.length : 0;
         if (nT + nF === 0)
             return;
         if (curseur < 0) {
             curseur = 0;
         } else if (curseur < nT) {
             const ligne = Math.floor(curseur / colonnes);
-            const derniereLigne = Math.floor((nT - 1) / colonnes);
+            const derniere = Math.floor((nT - 1) / colonnes);
             if (curseur + colonnes < nT) curseur += colonnes;
-            else if (ligne < derniereLigne) curseur = nT - 1;
+            else if (ligne < derniere) curseur = nT - 1;
             else if (nF > 0) curseur = nT;
         } else if (curseur < nT + nF - 1) {
             curseur++;
@@ -243,12 +363,16 @@ PanelWindow {
         if (curseur < 0)
             return;
         if (curseur > nT) curseur--;
-        else if (curseur === nT) curseur = nT - 1;           // retour à la dernière tuile (ou -1 s'il n'y en a pas)
+        else if (curseur === nT) curseur = nT - 1;
         else curseur = curseur - colonnes >= 0 ? curseur - colonnes : -1;
     }
 
-    // ← → : se déplacer dans les tuiles. Renvoie false si la touche doit aller au champ.
     function lateral(sens) {
+        if (vue === "calendrier") {
+            moisDecalage += sens;
+            jourChoisi = 0;
+            return true;
+        }
         if (enRecherche || curseur < 0 || curseur >= nbTuiles)
             return false;
         curseur = Math.max(0, Math.min(nbTuiles - 1, curseur + sens));
@@ -262,7 +386,7 @@ PanelWindow {
             lancerTuile(tuiles[curseur]);
             ouvert = false;
         } else if (curseur >= nbTuiles) {
-            const f = fenetres[curseur - nbTuiles];
+            const f = fenetresVisibles[curseur - nbTuiles];
             if (f) {
                 f.fenetre.activate();
                 ouvert = false;
@@ -270,14 +394,20 @@ PanelWindow {
         }
     }
 
-    // Suppr : ferme la fenêtre choisie. Renvoie false si la touche doit aller au champ.
     function fermerChoix() {
         if (enRecherche || curseur < nbTuiles)
             return false;
-        const f = fenetres[curseur - nbTuiles];
+        const f = fenetresVisibles[curseur - nbTuiles];
         if (f)
             f.fenetre.close();
         return true;
+    }
+
+    function echap() {
+        if (vue === "calendrier")
+            vue = "accueil";
+        else
+            ouvert = false;
     }
 
     // --- Icônes -------------------------------------------------------------
@@ -287,8 +417,6 @@ PanelWindow {
         return Quickshell.iconPath(icone, "application-x-executable");
     }
 
-    // Icône d'une tuile : celle de l'application quand l'action lance une app et
-    // qu'aucune icône n'est imposée (ou "auto") ; sinon l'icône indiquée.
     function iconeTuile(t) {
         const a = t.action || {};
         if ((!t.icone || t.icone === "auto") && a.type === "app") {
@@ -298,438 +426,864 @@ PanelWindow {
         return t.icone || "";
     }
 
-    // Une icône courte (1 ou 2 caractères, ex. un emoji) s'affiche comme du texte.
     function estGlyphe(icone) {
         return icone && [...icone].length <= 2;
+    }
+
+    // --- Calendrier (interne pour l'instant) --------------------------------
+    readonly property date moisAffiche: new Date(dateRef.getFullYear(), dateRef.getMonth() + moisDecalage, 1)
+    readonly property int jourAffiche: jourChoisi > 0 ? jourChoisi : (moisDecalage === 0 ? dateRef.getDate() : 1)
+
+    function ouvrirCalendrier() {
+        dateRef = new Date();
+        moisDecalage = 0;
+        jourChoisi = 0;
+        vue = "calendrier";
+    }
+    readonly property var nomsMois: ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
+    readonly property var nomsJours: ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."]
+
+    function casesMois() {
+        const an = moisAffiche.getFullYear(), m = moisAffiche.getMonth();
+        const premier = (new Date(an, m, 1).getDay() + 6) % 7;
+        const nb = new Date(an, m + 1, 0).getDate();
+        const auj = new Date(dateRef.getFullYear(), dateRef.getMonth(), dateRef.getDate()).getTime();
+        const cases = [];
+        for (let i = 0; i < premier; i++)
+            cases.push({ jour: 0 });
+        for (let j = 1; j <= nb; j++) {
+            const t = new Date(an, m, j).getTime();
+            cases.push({ jour: j, passe: t < auj, aujourdhui: t === auj });
+        }
+        return cases;
     }
 
     // --- Interface ----------------------------------------------------------
     Rectangle {
         anchors.fill: parent
-        color: hub.cFond
-
-        // Un clic en dehors du contenu ferme le hub.
+        color: Qt.rgba(0, 0, 0, 0.14)
         MouseArea {
             anchors.fill: parent
             onClicked: hub.ouvert = false
         }
     }
 
-    // Absorbe les clics dans la zone du contenu (seul un clic à l'extérieur ferme).
-    MouseArea {
-        anchors.fill: contenu
-        anchors.margins: -16
-    }
-
-    ColumnLayout {
-        id: contenu
-        width: Math.min(680, hub.width - 48)
+    Rectangle {
+        id: panneau
+        width: Math.min(720, hub.width - 48)
+        height: (hub.vue === "calendrier" ? vueCalendrier.implicitHeight : vueAccueil.implicitHeight) + 52
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
-        anchors.topMargin: Math.max(48, hub.height * 0.14)
-        spacing: 18
-
-        // Ligne d'infos, alignée sur la barre de recherche :
-        // batterie à gauche, heure au centre, date à droite.
-        Item {
-            Layout.fillWidth: true
-            Layout.preferredHeight: heure.implicitHeight
-            Text {
-                readonly property var batt: UPower.displayDevice
-                anchors.left: parent.left
-                anchors.leftMargin: 4
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 6
-                visible: batt && batt.isLaptopBattery
-                text: visible ? (UPower.onBattery ? "" : "⚡ ") + Math.round(batt.percentage * 100) + " %" : ""
-                color: hub.cDiscret
-                font.family: hub.police
-                font.pixelSize: 15
-            }
-            Text {
-                id: heure
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: Qt.formatDateTime(hub.maintenant, "HH:mm")
-                color: hub.cTexte
-                font.family: hub.police
-                font.pixelSize: 44
-                font.weight: Font.DemiBold
-            }
-            Text {
-                anchors.right: parent.right
-                anchors.rightMargin: 4
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 6
-                text: hub.maintenant.toLocaleDateString(Qt.locale("fr_FR"), "dddd d MMMM")
-                color: hub.cDiscret
-                font.family: hub.police
-                font.pixelSize: 15
+        y: Math.max(24, Math.min(48, hub.height * 0.05))
+        radius: Theme.arrondiPanneau
+        color: Theme.panneau
+        border.width: 1
+        border.color: Theme.trait
+        clip: true
+        Behavior on height {
+            NumberAnimation {
+                duration: Theme.duree
+                easing.type: Easing.OutCubic
             }
         }
 
-        // Barre de recherche. Elle garde le clavier en permanence : taper lance
-        // une recherche, les flèches naviguent dans les tuiles et les fenêtres.
-        TextField {
-            id: recherche
-            Layout.fillWidth: true
-            Layout.preferredHeight: 54
-            placeholderText: "Rechercher une application, une tuile…"
-            placeholderTextColor: hub.cDiscret
-            color: hub.cTexte
-            font.family: hub.police
-            font.pixelSize: 18
-            leftPadding: 20
-            background: Rectangle {
-                radius: 14
-                color: hub.cCarte
-                border.width: 2
-                border.color: recherche.activeFocus && hub.curseur < 0 ? hub.cAccent : "transparent"
-            }
-            onTextChanged: {
-                hub.resultats = hub.chercher(text);
-                hub.selection = 0;
-                hub.curseur = -1;
-            }
-            Keys.onEscapePressed: hub.ouvert = false
-            Keys.onDownPressed: hub.bas()
-            Keys.onUpPressed: hub.haut()
-            Keys.onTabPressed: hub.bas()
-            Keys.onBacktabPressed: hub.haut()
-            Keys.onLeftPressed: event => event.accepted = hub.lateral(-1)
-            Keys.onRightPressed: event => event.accepted = hub.lateral(1)
-            Keys.onDeletePressed: event => event.accepted = hub.fermerChoix()
-            Keys.onReturnPressed: hub.valider()
-            Keys.onEnterPressed: hub.valider()
+        MouseArea {
+            anchors.fill: parent
         }
 
-        // Résultats de recherche
+        // ===================== Vue d'accueil =====================
         ColumnLayout {
-            visible: hub.enRecherche
-            Layout.fillWidth: true
-            spacing: 4
-
-            Repeater {
-                model: hub.resultats
-                delegate: Rectangle {
-                    required property var modelData
-                    required property int index
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 52
-                    radius: 10
-                    color: index === hub.selection ? hub.cCarteSurvol : (zone.containsMouse ? hub.cCarte : "transparent")
-
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.leftMargin: 14
-                        anchors.rightMargin: 14
-                        spacing: 14
-                        Item {
-                            Layout.preferredWidth: 28
-                            Layout.preferredHeight: 28
-                            Text {
-                                anchors.centerIn: parent
-                                visible: hub.estGlyphe(modelData.icone)
-                                text: modelData.icone
-                                font.pixelSize: 22
-                            }
-                            Image {
-                                anchors.fill: parent
-                                visible: !hub.estGlyphe(modelData.icone)
-                                source: hub.estGlyphe(modelData.icone) ? "" : hub.chemin(modelData.icone)
-                                sourceSize.width: 28
-                                sourceSize.height: 28
-                            }
-                        }
-                        ColumnLayout {
-                            spacing: 0
-                            Layout.fillWidth: true
-                            Text {
-                                text: modelData.nom
-                                color: hub.cTexte
-                                font.family: hub.police
-                                font.pixelSize: 15
-                                elide: Text.ElideRight
-                                Layout.fillWidth: true
-                            }
-                            Text {
-                                text: modelData.detail
-                                color: hub.cDiscret
-                                font.family: hub.police
-                                font.pixelSize: 12
-                                elide: Text.ElideRight
-                                Layout.fillWidth: true
-                            }
-                        }
-                        Text {
-                            text: modelData.genre === "tuile" ? "tuile" : ""
-                            color: hub.cAccent
-                            font.family: hub.police
-                            font.pixelSize: 11
-                        }
-                    }
-                    MouseArea {
-                        id: zone
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: hub.activer(modelData)
-                    }
-                }
+            id: vueAccueil
+            x: 28
+            y: 26
+            width: parent.width - 56
+            spacing: 18
+            opacity: hub.vue === "accueil" ? 1 : 0
+            visible: opacity > 0
+            Behavior on opacity {
+                NumberAnimation { duration: Theme.duree * 0.7 }
             }
 
-            Text {
-                visible: hub.resultats.length === 0
-                text: "Aucun résultat"
-                color: hub.cDiscret
-                font.family: hub.police
-                font.pixelSize: 14
-                Layout.leftMargin: 14
-            }
-        }
-
-        // Tuiles (quand la recherche est vide)
-        Flow {
-            visible: !hub.enRecherche && hub.tuiles.length > 0
-            Layout.fillWidth: true
-            spacing: 12
-
-            Repeater {
-                model: hub.tuiles
-                delegate: Rectangle {
-                    required property var modelData
-                    required property int index
-                    readonly property bool choisie: hub.curseur === index
-                    width: 100
-                    height: 92
-                    radius: 14
-                    color: zoneTuile.containsMouse || choisie ? hub.cCarteSurvol : hub.cCarte
-                    border.width: zoneTuile.containsMouse || choisie ? 2 : 0
-                    border.color: hub.cAccent
-
-                    Column {
-                        anchors.centerIn: parent
-                        spacing: 8
-                        Item {
-                            width: 32
-                            height: 32
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            readonly property string icone: hub.iconeTuile(modelData)
-                            Text {
-                                anchors.centerIn: parent
-                                visible: hub.estGlyphe(parent.icone)
-                                text: parent.icone
-                                color: hub.cTexte
-                                font.pixelSize: 26
-                            }
-                            Image {
-                                anchors.fill: parent
-                                visible: !hub.estGlyphe(parent.icone)
-                                source: hub.estGlyphe(parent.icone) ? "" : hub.chemin(parent.icone)
-                                sourceSize.width: 32
-                                sourceSize.height: 32
-                            }
-                        }
-                        Text {
-                            width: 88
-                            horizontalAlignment: Text.AlignHCenter
-                            text: modelData.nom || ""
-                            color: hub.cTexte
-                            font.family: hub.police
-                            font.pixelSize: 12
-                            elide: Text.ElideRight
-                        }
-                    }
-                    MouseArea {
-                        id: zoneTuile
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: {
-                            hub.lancerTuile(modelData);
-                            hub.ouvert = false;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Lecteur de musique : apparaît dès qu'un lecteur est actif (LibreWolf,
-        // mpv, Spotify…). Désactivable dans tuiles.json : "widgets": { "musique": false }
-        Rectangle {
-            id: musique
-            readonly property var p: hub.lecteur
-            visible: hub.afficherMusique && p !== null && !hub.enRecherche
-            Layout.fillWidth: true
-            Layout.preferredHeight: 72
-            radius: 14
-            color: hub.cCarte
-
+            // En-tête « compacte » : petite heure, date cliquable, batterie
             RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 10
-                anchors.rightMargin: 12
+                visible: hub.entete === "compacte"
+                Layout.fillWidth: true
                 spacing: 14
+                Text {
+                    text: Qt.formatDateTime(hub.maintenant, "HH:mm")
+                    color: Theme.texte
+                    font.family: Theme.police
+                    font.pixelSize: 34
+                    font.weight: Font.Bold
+                    font.letterSpacing: -1.2
+                }
+                DateCliquable {
+                    Layout.fillWidth: true
+                    date: hub.maintenant
+                    onClic: hub.ouvrirCalendrier()
+                }
+                Batterie {}
+            }
 
-                Rectangle {
-                    Layout.preferredWidth: 52
-                    Layout.preferredHeight: 52
-                    radius: 8
-                    color: hub.cCarteSurvol
-                    clip: true
+            // En-tête « ligne » : date à gauche, heure au centre, batterie à droite
+            Item {
+                visible: hub.entete === "ligne"
+                Layout.fillWidth: true
+                Layout.preferredHeight: 62
+                DateCliquable {
+                    anchors.left: parent.left
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: 8
+                    date: hub.maintenant
+                    onClic: hub.ouvrirCalendrier()
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottom: parent.bottom
+                    text: Qt.formatDateTime(hub.maintenant, "HH:mm")
+                    color: Theme.texte
+                    font.family: Theme.police
+                    font.pixelSize: 60
+                    font.weight: Font.Bold
+                    font.letterSpacing: -2.4
+                }
+                Batterie {
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: 6
+                }
+            }
+
+            // En-tête « centrée » : grande heure, date et batterie dessous
+            ColumnLayout {
+                visible: hub.entete === "centree"
+                Layout.fillWidth: true
+                spacing: 4
+                Text {
+                    Layout.alignment: Qt.AlignHCenter
+                    text: Qt.formatDateTime(hub.maintenant, "HH") + "<font color='" + Theme.accent + "'>:</font>" + Qt.formatDateTime(hub.maintenant, "mm")
+                    textFormat: Text.StyledText
+                    color: Theme.texte
+                    font.family: Theme.police
+                    font.pixelSize: 80
+                    font.weight: Font.Bold
+                    font.letterSpacing: -3
+                }
+                RowLayout {
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: 10
+                    DateCliquable {
+                        majuscules: true
+                        date: hub.maintenant
+                        onClic: hub.ouvrirCalendrier()
+                    }
+                    Batterie {}
+                }
+            }
+
+            // Barre de recherche
+            TextField {
+                id: recherche
+                Layout.fillWidth: true
+                Layout.preferredHeight: 58
+                placeholderText: "Rechercher"
+                placeholderTextColor: Theme.discret
+                color: Theme.texte
+                font.family: Theme.police
+                font.pixelSize: 21
+                leftPadding: 52
+                background: Rectangle {
+                    radius: 18
+                    color: Theme.carte
+                    border.width: recherche.activeFocus && hub.curseur < 0 ? 2 : 1
+                    border.color: recherche.activeFocus && hub.curseur < 0 ? Theme.accent : Theme.trait
                     Text {
-                        anchors.centerIn: parent
-                        visible: pochette.status !== Image.Ready
-                        text: "♪"
-                        color: hub.cDiscret
+                        anchors.left: parent.left
+                        anchors.leftMargin: 20
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "⌕"
+                        color: Theme.discret
                         font.pixelSize: 24
                     }
-                    Image {
-                        id: pochette
-                        anchors.fill: parent
-                        source: musique.p ? (musique.p.trackArtUrl || "") : ""
-                        fillMode: Image.PreserveAspectCrop
-                        sourceSize.width: 104
-                        sourceSize.height: 104
-                        asynchronous: true
+                }
+                onTextChanged: {
+                    hub.resultats = hub.chercher(text);
+                    hub.selection = 0;
+                    hub.curseur = -1;
+                    delaiFichiers.restart();
+                }
+                Keys.onEscapePressed: hub.echap()
+                Keys.onDownPressed: hub.bas()
+                Keys.onUpPressed: hub.haut()
+                Keys.onTabPressed: hub.bas()
+                Keys.onBacktabPressed: hub.haut()
+                Keys.onLeftPressed: event => event.accepted = hub.lateral(-1)
+                Keys.onRightPressed: event => event.accepted = hub.lateral(1)
+                Keys.onDeletePressed: event => event.accepted = hub.fermerChoix()
+                Keys.onReturnPressed: hub.valider()
+                Keys.onEnterPressed: hub.valider()
+            }
+
+            // Résultats : la zone s'ouvre et pousse le reste vers le bas
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: hub.enRecherche ? listeResultats.implicitHeight : 0
+                Layout.topMargin: hub.enRecherche ? 0 : -18
+                clip: true
+                opacity: hub.enRecherche ? 1 : 0
+                Behavior on Layout.preferredHeight {
+                    NumberAnimation {
+                        duration: Theme.duree
+                        easing.type: Easing.OutCubic
                     }
                 }
+                Behavior on Layout.topMargin {
+                    NumberAnimation { duration: Theme.duree }
+                }
+                Behavior on opacity {
+                    NumberAnimation { duration: Theme.duree * 0.6 }
+                }
+
                 ColumnLayout {
+                    id: listeResultats
+                    width: parent.width
                     spacing: 2
+
+                    Repeater {
+                        model: hub.resultats
+                        delegate: ColumnLayout {
+                            id: res
+                            required property var modelData
+                            required property int index
+                            readonly property bool choisi: index === hub.selection
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            Text {
+                                visible: res.index === 0 || hub.resultats[res.index - 1].groupe !== res.modelData.groupe
+                                text: res.modelData.groupe.toUpperCase()
+                                color: Theme.discret
+                                font.family: Theme.police
+                                font.pixelSize: 11
+                                font.weight: Font.DemiBold
+                                font.letterSpacing: 1.6
+                                Layout.leftMargin: 10
+                                Layout.topMargin: res.index === 0 ? 2 : 10
+                                Layout.bottomMargin: 2
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 46
+                                radius: Theme.arrondiLigne
+                                color: res.choisi ? Theme.carteChoisie : (zoneRes.containsMouse ? Theme.carte : "transparent")
+                                border.width: res.choisi ? 2 : 0
+                                border.color: Theme.accent
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 12
+                                    anchors.rightMargin: 14
+                                    spacing: 12
+                                    Item {
+                                        Layout.preferredWidth: 26
+                                        Layout.preferredHeight: 26
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            visible: res.modelData.genre === "calcul" || res.modelData.genre === "web"
+                                            radius: 8
+                                            color: res.modelData.genre === "calcul" ? Theme.accent : Theme.bouton
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: res.modelData.genre === "calcul" ? "=" : "↗"
+                                                color: res.modelData.genre === "calcul" ? Theme.surAccent : Theme.texte
+                                                font.pixelSize: 14
+                                                font.weight: Font.Bold
+                                            }
+                                        }
+                                        Text {
+                                            anchors.centerIn: parent
+                                            visible: res.modelData.genre !== "calcul" && res.modelData.genre !== "web" && hub.estGlyphe(res.modelData.icone)
+                                            text: res.modelData.icone
+                                            font.pixelSize: 20
+                                        }
+                                        Image {
+                                            anchors.fill: parent
+                                            visible: res.modelData.genre !== "calcul" && res.modelData.genre !== "web" && !hub.estGlyphe(res.modelData.icone)
+                                            source: visible ? hub.chemin(res.modelData.icone) : ""
+                                            sourceSize.width: 26
+                                            sourceSize.height: 26
+                                        }
+                                    }
+                                    Text {
+                                        text: res.modelData.nom
+                                        color: Theme.texte
+                                        font.family: Theme.police
+                                        font.pixelSize: 15
+                                        font.weight: Font.Medium
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+                                    Text {
+                                        text: res.modelData.detail
+                                        color: Theme.discret
+                                        font.family: Theme.police
+                                        font.pixelSize: 12
+                                        elide: Text.ElideMiddle
+                                        Layout.maximumWidth: 260
+                                    }
+                                }
+                                MouseArea {
+                                    id: zoneRes
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onClicked: hub.activer(res.modelData)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Le reste du hub : atténué pendant une recherche
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 18
+                opacity: hub.enRecherche ? 0.45 : 1
+                Behavior on opacity {
+                    NumberAnimation { duration: Theme.duree }
+                }
+
+                // Tuiles
+                GridLayout {
+                    visible: hub.tuiles.length > 0
                     Layout.fillWidth: true
-                    Text {
-                        text: musique.p ? (musique.p.trackTitle || musique.p.identity || "Lecture") : ""
-                        color: hub.cTexte
-                        font.family: hub.police
-                        font.pixelSize: 15
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
+                    columns: hub.colonnes
+                    columnSpacing: 8
+                    rowSpacing: 8
+
+                    Repeater {
+                        model: hub.tuiles
+                        delegate: Rectangle {
+                            id: tuile
+                            required property var modelData
+                            required property int index
+                            readonly property bool choisie: hub.curseur === index
+                            readonly property string icone: hub.iconeTuile(modelData)
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 96
+                            radius: Theme.arrondiCarte
+                            color: choisie ? Theme.carteChoisie : Theme.carte
+                            border.width: choisie || zoneTuile.containsMouse ? 2 : 1
+                            border.color: choisie || zoneTuile.containsMouse ? Theme.accent : Theme.trait
+                            scale: zoneTuile.containsMouse ? 1.03 : 1
+                            Behavior on scale {
+                                NumberAnimation { duration: 160 }
+                            }
+
+                            Column {
+                                anchors.centerIn: parent
+                                spacing: 9
+                                Item {
+                                    width: 44
+                                    height: 44
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    Text {
+                                        anchors.centerIn: parent
+                                        visible: hub.estGlyphe(tuile.icone)
+                                        text: tuile.icone
+                                        color: Theme.texte
+                                        font.pixelSize: 30
+                                    }
+                                    Image {
+                                        anchors.fill: parent
+                                        visible: !hub.estGlyphe(tuile.icone)
+                                        source: visible ? hub.chemin(tuile.icone) : ""
+                                        sourceSize.width: 44
+                                        sourceSize.height: 44
+                                    }
+                                }
+                                Text {
+                                    width: tuile.width - 10
+                                    horizontalAlignment: Text.AlignHCenter
+                                    text: tuile.modelData.nom || ""
+                                    color: Theme.texte
+                                    font.family: Theme.police
+                                    font.pixelSize: 12
+                                    font.weight: Font.Medium
+                                    elide: Text.ElideRight
+                                }
+                            }
+                            MouseArea {
+                                id: zoneTuile
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: {
+                                    hub.lancerTuile(tuile.modelData);
+                                    hub.ouvert = false;
+                                }
+                            }
+                        }
                     }
-                    Text {
-                        text: musique.p ? [musique.p.trackArtist, musique.p.identity].filter(s => s).join(" · ") : ""
-                        color: hub.cDiscret
-                        font.family: hub.police
-                        font.pixelSize: 12
-                        elide: Text.ElideRight
-                        Layout.fillWidth: true
+                }
+
+                // Lecteur de musique + égaliseur
+                Rectangle {
+                    id: musique
+                    readonly property var p: hub.lecteur
+                    visible: hub.afficherMusique && p !== null
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: hub.egaliseur ? 128 : 74
+                    radius: Theme.arrondiCarte
+                    color: Theme.carte
+                    border.width: 1
+                    border.color: Theme.trait
+
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 12
+                        anchors.rightMargin: 14
+                        spacing: 10
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 14
+                            Rectangle {
+                                Layout.preferredWidth: 48
+                                Layout.preferredHeight: 48
+                                radius: 12
+                                color: Theme.bouton
+                                clip: true
+                                Logo {
+                                    anchors.centerIn: parent
+                                    visible: pochette.status !== Image.Ready
+                                    taille: 20
+                                }
+                                Image {
+                                    id: pochette
+                                    anchors.fill: parent
+                                    source: musique.p ? (musique.p.trackArtUrl || "") : ""
+                                    fillMode: Image.PreserveAspectCrop
+                                    sourceSize.width: 96
+                                    sourceSize.height: 96
+                                    asynchronous: true
+                                }
+                            }
+                            ColumnLayout {
+                                spacing: 2
+                                Layout.fillWidth: true
+                                Text {
+                                    text: musique.p ? (musique.p.trackTitle || musique.p.identity || "Lecture") : ""
+                                    color: Theme.texte
+                                    font.family: Theme.police
+                                    font.pixelSize: 15
+                                    font.weight: Font.DemiBold
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+                                Text {
+                                    text: musique.p ? [musique.p.trackArtist, musique.p.identity].filter(s => s).join(" — ") : ""
+                                    color: Theme.discret
+                                    font.family: Theme.police
+                                    font.pixelSize: 13
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+                            }
+                            Bouton {
+                                glyphe: "⏮"
+                                actif: !!(musique.p && musique.p.canGoPrevious)
+                                onClic: musique.p.previous()
+                            }
+                            Bouton {
+                                glyphe: musique.p && musique.p.isPlaying ? "⏸" : "▶"
+                                rond: true
+                                plein: true
+                                actif: !!(musique.p && musique.p.canTogglePlaying)
+                                onClic: musique.p.togglePlaying()
+                            }
+                            Bouton {
+                                glyphe: "⏭"
+                                actif: !!(musique.p && musique.p.canGoNext)
+                                onClic: musique.p.next()
+                            }
+                        }
+
+                        // Égaliseur en colonnes (cava) ; à plat si rien ne joue
+                        Row {
+                            visible: hub.egaliseur
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 44
+                            spacing: 4
+                            Repeater {
+                                model: hub.nbBarres
+                                delegate: Item {
+                                    id: colonne
+                                    required property int index
+                                    readonly property real niveau: hub.barres.length > index ? hub.barres[index] : 0
+                                    width: (parent.width - (hub.nbBarres - 1) * 4) / hub.nbBarres
+                                    height: 44
+                                    Rectangle {
+                                        anchors.bottom: parent.bottom
+                                        width: parent.width
+                                        height: Math.max(3, colonne.niveau * parent.height)
+                                        radius: 2
+                                        gradient: Gradient {
+                                            GradientStop { position: 0; color: Theme.accentClair }
+                                            GradientStop { position: 0.45; color: Theme.accent }
+                                            GradientStop { position: 1; color: Theme.accentFonce }
+                                        }
+                                        Behavior on height {
+                                            enabled: !Theme.eco
+                                            NumberAnimation { duration: 70 }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-                Bouton {
-                    glyphe: "⏮"
-                    actif: !!(musique.p && musique.p.canGoPrevious)
-                    onClic: musique.p.previous()
-                }
-                Bouton {
-                    glyphe: musique.p && musique.p.isPlaying ? "⏸" : "▶"
-                    actif: !!(musique.p && musique.p.canTogglePlaying)
-                    onClic: musique.p.togglePlaying()
-                }
-                Bouton {
-                    glyphe: "⏭"
-                    actif: !!(musique.p && musique.p.canGoNext)
-                    onClic: musique.p.next()
-                }
-            }
-        }
 
-        // Fenêtres ouvertes, regroupées par bureau (quand la recherche est vide)
-        ColumnLayout {
-            visible: !hub.enRecherche
-            Layout.fillWidth: true
-            Layout.topMargin: 8
-            spacing: 4
-
-            Text {
-                visible: hub.fenetres.length === 0
-                text: "Aucune fenêtre ouverte"
-                color: hub.cDiscret
-                font.family: hub.police
-                font.pixelSize: 13
-                Layout.leftMargin: 4
-            }
-
-            Repeater {
-                model: hub.fenetres
-                delegate: ColumnLayout {
-                    id: ligne
-                    required property var modelData
-                    required property int index
-                    readonly property var fenetre: modelData.fenetre
-                    readonly property var entree: DesktopEntries.heuristicLookup(fenetre.appId)
-                    readonly property bool choisie: hub.curseur === hub.nbTuiles + index
-                    readonly property bool nouveauBureau: index === 0 || hub.fenetres[index - 1].bureau !== modelData.bureau
+                // Fenêtres ouvertes (masquées pendant une recherche, pour la place)
+                ColumnLayout {
+                    visible: hub.afficherFenetres && !hub.enRecherche
                     Layout.fillWidth: true
                     spacing: 4
 
-                    // Titre de groupe : « Bureau 2 », au premier élément de chaque bureau
                     Text {
-                        visible: ligne.nouveauBureau
-                        text: hub.nomBureau(ligne.modelData.bureau) || "Fenêtres ouvertes"
-                        color: hub.cDiscret
-                        font.family: hub.police
+                        visible: hub.fenetres.length === 0
+                        text: "Aucune fenêtre ouverte"
+                        color: Theme.discret
+                        font.family: Theme.police
                         font.pixelSize: 13
-                        Layout.leftMargin: 4
-                        Layout.topMargin: ligne.index === 0 ? 0 : 8
+                        Layout.leftMargin: 6
                     }
 
+                    // Disposition « segments » : un sélecteur filtre par bureau
                     Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 46
+                        visible: hub.modeBureaux === "segments" && hub.fenetres.length > 0
+                        Layout.preferredHeight: 34
+                        Layout.preferredWidth: rangSegments.implicitWidth + 6
                         radius: 10
-                        color: ligne.choisie ? hub.cCarteSurvol : (zoneFenetre.containsMouse ? hub.cCarte : "transparent")
-                        border.width: ligne.choisie ? 2 : 0
-                        border.color: hub.cAccent
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 12
-                            anchors.rightMargin: 8
-                            spacing: 12
-                            Image {
-                                Layout.preferredWidth: 24
-                                Layout.preferredHeight: 24
-                                source: hub.chemin(ligne.entree ? ligne.entree.icon : ligne.fenetre.appId)
-                                sourceSize.width: 24
-                                sourceSize.height: 24
-                            }
-                            Text {
-                                text: ligne.fenetre.title || ligne.fenetre.appId
-                                color: ligne.fenetre.activated ? hub.cTexte : hub.cDiscret
-                                font.family: hub.police
-                                font.pixelSize: 14
-                                elide: Text.ElideRight
-                                Layout.fillWidth: true
-                            }
-                            // Bouton fermer : un clic ferme l'application
-                            Bouton {
-                                glyphe: "✕"
-                                survol: "#5a2a24"
-                                z: 2
-                                onClic: ligne.fenetre.close()
+                        color: Theme.bouton
+                        Row {
+                            id: rangSegments
+                            anchors.centerIn: parent
+                            spacing: 2
+                            Repeater {
+                                model: [0].concat(hub.bureauxOuverts())
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    width: etiquetteSeg.implicitWidth + 26
+                                    height: 28
+                                    radius: 8
+                                    color: hub.segment === modelData ? Qt.rgba(1, 1, 1, 0.18) : "transparent"
+                                    Text {
+                                        id: etiquetteSeg
+                                        anchors.centerIn: parent
+                                        text: parent.modelData === 0 ? "Tous" : "Bureau " + parent.modelData
+                                        color: Theme.texte
+                                        font.family: Theme.police
+                                        font.pixelSize: 12
+                                        font.weight: Font.Medium
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        onClicked: hub.segment = parent.modelData
+                                    }
+                                }
                             }
                         }
-                        MouseArea {
-                            id: zoneFenetre
-                            anchors.fill: parent
-                            anchors.rightMargin: 44
-                            hoverEnabled: true
-                            onClicked: {
-                                ligne.fenetre.activate();
-                                hub.ouvert = false;
+                    }
+
+                    Repeater {
+                        model: hub.fenetresVisibles
+                        delegate: ColumnLayout {
+                            id: ligne
+                            required property var modelData
+                            required property int index
+                            readonly property var fenetre: modelData.fenetre
+                            readonly property var entree: DesktopEntries.heuristicLookup(fenetre.appId)
+                            readonly property bool choisie: hub.curseur === hub.nbTuiles + index
+                            readonly property bool nouveauBureau: index === 0 || hub.fenetresVisibles[index - 1].bureau !== modelData.bureau
+                            Layout.fillWidth: true
+                            spacing: 4
+
+                            Text {
+                                visible: hub.modeBureaux === "titres" && ligne.nouveauBureau
+                                text: hub.nomBureau(ligne.modelData.bureau)
+                                color: Theme.discret
+                                font.family: Theme.police
+                                font.pixelSize: 12
+                                font.weight: Font.DemiBold
+                                Layout.leftMargin: 6
+                                Layout.topMargin: ligne.index === 0 ? 0 : 8
                             }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 44
+                                radius: Theme.arrondiLigne
+                                color: ligne.choisie ? Theme.carteChoisie : (zoneFenetre.containsMouse ? Theme.carte : "transparent")
+                                border.width: ligne.choisie ? 2 : 0
+                                border.color: Theme.accent
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: hub.modeBureaux === "badges" ? 6 : 10
+                                    anchors.rightMargin: 6
+                                    spacing: 12
+                                    Rectangle {
+                                        visible: hub.modeBureaux === "badges"
+                                        Layout.preferredWidth: 30
+                                        Layout.preferredHeight: 30
+                                        radius: 9
+                                        readonly property bool actuel: Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id === ligne.modelData.bureau
+                                        color: actuel ? Theme.accent : Theme.bouton
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: ligne.modelData.bureau > 0 ? ligne.modelData.bureau : "·"
+                                            color: parent.actuel ? Theme.surAccent : Theme.discret
+                                            font.family: Theme.police
+                                            font.pixelSize: 13
+                                            font.weight: Font.Bold
+                                        }
+                                    }
+                                    Image {
+                                        Layout.preferredWidth: 24
+                                        Layout.preferredHeight: 24
+                                        source: hub.chemin(ligne.entree ? ligne.entree.icon : ligne.fenetre.appId)
+                                        sourceSize.width: 24
+                                        sourceSize.height: 24
+                                    }
+                                    Text {
+                                        text: ligne.fenetre.title || ligne.fenetre.appId
+                                        color: ligne.fenetre.activated ? Theme.texte : Theme.discret
+                                        font.family: Theme.police
+                                        font.pixelSize: 14
+                                        font.weight: Font.Medium
+                                        elide: Text.ElideRight
+                                        Layout.fillWidth: true
+                                    }
+                                    Bouton {
+                                        glyphe: "✕"
+                                        rond: true
+                                        survol: "#5a2a24"
+                                        z: 2
+                                        onClic: ligne.fenetre.close()
+                                    }
+                                }
+                                MouseArea {
+                                    id: zoneFenetre
+                                    anchors.fill: parent
+                                    anchors.rightMargin: 44
+                                    hoverEnabled: true
+                                    onClicked: {
+                                        ligne.fenetre.activate();
+                                        hub.ouvert = false;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Aide clavier
+            Row {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.topMargin: 2
+                spacing: 16
+                Repeater {
+                    model: hub.enRecherche ? [["↑ ↓", "choisir"], ["↵", "ouvrir"], ["Échap", "quitter"]] : [["↑ ↓ ← →", "naviguer"], ["↵", "ouvrir"], ["Suppr", "fermer"], ["Échap", "quitter"]]
+                    delegate: Row {
+                        required property var modelData
+                        spacing: 6
+                        Rectangle {
+                            width: touche.implicitWidth + 12
+                            height: 20
+                            radius: 5
+                            color: Theme.bouton
+                            border.width: 1
+                            border.color: Theme.trait
+                            Text {
+                                id: touche
+                                anchors.centerIn: parent
+                                text: modelData[0]
+                                color: Theme.discret
+                                font.family: Theme.police
+                                font.pixelSize: 11
+                            }
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: modelData[1]
+                            color: Theme.discret
+                            font.family: Theme.police
+                            font.pixelSize: 11
                         }
                     }
                 }
             }
         }
 
-        Text {
-            Layout.topMargin: 10
-            Layout.alignment: Qt.AlignHCenter
-            text: hub.enRecherche
-                ? "↑ ↓ puis Entrée · Échap pour fermer"
-                : "Flèches pour naviguer · Entrée pour ouvrir · Suppr ferme la fenêtre choisie · Échap"
-            color: hub.cDiscret
-            font.family: hub.police
-            font.pixelSize: 11
-            opacity: 0.7
+        // ===================== Vue calendrier =====================
+        ColumnLayout {
+            id: vueCalendrier
+            x: 40
+            y: 30
+            width: parent.width - 80
+            spacing: 20
+            opacity: hub.vue === "calendrier" ? 1 : 0
+            visible: opacity > 0
+            Behavior on opacity {
+                NumberAnimation { duration: Theme.duree }
+            }
+
+            // Le numéro du jour grandit depuis l'en-tête
+            Text {
+                text: hub.jourAffiche
+                color: Theme.texte
+                font.family: Theme.police
+                font.pixelSize: 132
+                font.weight: Font.ExtraBold
+                font.letterSpacing: -6
+                transformOrigin: Item.TopLeft
+                scale: hub.vue === "calendrier" ? 1 : 0.14
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: Theme.duree * 1.3
+                        easing.type: Easing.OutCubic
+                    }
+                }
+                Layout.preferredHeight: 116
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                ColumnLayout {
+                    spacing: 0
+                    Text {
+                        text: hub.nomsMois[hub.moisAffiche.getMonth()].toUpperCase()
+                        color: Theme.texte
+                        font.family: Theme.police
+                        font.pixelSize: 26
+                        font.weight: Font.Medium
+                        font.letterSpacing: 0.5
+                    }
+                    Text {
+                        text: hub.moisAffiche.getFullYear()
+                        color: Theme.discret
+                        font.family: Theme.police
+                        font.pixelSize: 26
+                        font.weight: Font.Light
+                    }
+                }
+                Item {
+                    Layout.fillWidth: true
+                }
+                Text {
+                    Layout.alignment: Qt.AlignBottom
+                    text: hub.nomsJours[new Date(hub.moisAffiche.getFullYear(), hub.moisAffiche.getMonth(), hub.jourAffiche).getDay()]
+                    color: Theme.texte
+                    font.family: Theme.police
+                    font.pixelSize: 26
+                }
+            }
+
+            Row {
+                spacing: 8
+                Bouton {
+                    glyphe: "‹"
+                    rond: true
+                    onClic: {
+                        hub.moisDecalage--;
+                        hub.jourChoisi = 0;
+                    }
+                }
+                Bouton {
+                    glyphe: "›"
+                    rond: true
+                    onClic: {
+                        hub.moisDecalage++;
+                        hub.jourChoisi = 0;
+                    }
+                }
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 7
+                columnSpacing: 8
+                rowSpacing: 10
+
+                Repeater {
+                    model: ["L", "M", "M", "J", "V", "S", "D"]
+                    delegate: Text {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignHCenter
+                        text: modelData
+                        color: Theme.discret
+                        font.family: Theme.police
+                        font.pixelSize: 13
+                        font.weight: Font.Medium
+                    }
+                }
+                Repeater {
+                    model: hub.vue === "calendrier" ? hub.casesMois() : []
+                    delegate: Item {
+                        id: caseJour
+                        required property var modelData
+                        required property int index
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 50
+                        Rectangle {
+                            id: rond
+                            visible: caseJour.modelData.jour > 0
+                            anchors.centerIn: parent
+                            width: 48
+                            height: 48
+                            radius: 24
+                            color: caseJour.modelData.aujourdhui ? Theme.accent : (caseJour.modelData.passe ? Theme.texte : "transparent")
+                            border.width: caseJour.modelData.aujourdhui || caseJour.modelData.passe ? 0 : 1.5
+                            border.color: Qt.rgba(Theme.texte.r, Theme.texte.g, Theme.texte.b, 0.22)
+                            opacity: 0
+                            scale: 0.4
+                            SequentialAnimation {
+                                id: apparition
+                                PauseAnimation { duration: Theme.duree * 0.4 + caseJour.index * (Theme.eco ? 0 : 12) }
+                                ParallelAnimation {
+                                    NumberAnimation { target: rond; property: "opacity"; to: 1; duration: 220 }
+                                    NumberAnimation { target: rond; property: "scale"; to: 1; duration: 260; easing.type: Easing.OutBack }
+                                }
+                            }
+                            Component.onCompleted: apparition.start()
+                            Rectangle {
+                                anchors.centerIn: parent
+                                visible: caseJour.modelData.jour === hub.jourChoisi && !caseJour.modelData.aujourdhui
+                                width: 54
+                                height: 54
+                                radius: 27
+                                color: "transparent"
+                                border.width: 2
+                                border.color: Theme.accent
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: hub.jourChoisi = caseJour.modelData.jour
+                            }
+                        }
+                    }
+                }
+            }
+
+            Text {
+                Layout.alignment: Qt.AlignHCenter
+                text: "← → mois précédent / suivant · Échap pour revenir"
+                color: Theme.discret
+                font.family: Theme.police
+                font.pixelSize: 11
+            }
         }
     }
 }

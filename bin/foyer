@@ -6,6 +6,7 @@
 #   foyer modules            liste les modules disponibles
 #   foyer groupes            liste les groupes de logiciels optionnels
 #   foyer installer <groupe> installe un groupe optionnel (ex. : foyer installer si)
+#   foyer theme              applique ~/.config/foyer/theme.json à tout le bureau
 #   foyer version            affiche la version installée
 #   foyer history            liste les versions installées sur cet ordinateur
 #   foyer rollback           revient à la version précédente de Foyer
@@ -31,7 +32,7 @@ lister_modules() {
 nom_module() { basename "$1" .sh | cut -d- -f2-; }
 
 # Poids de chaque module dans la progression globale (le volume réel de travail).
-declare -A POIDS=([depots]=10 [pilotes]=5 [paquets]=60 [vie-privee]=4 [bureau]=4 [services]=2 [instantanes]=15)
+declare -A POIDS=([depots]=10 [pilotes]=5 [paquets]=60 [vie-privee]=4 [theme]=3 [bureau]=4 [services]=2 [instantanes]=15)
 FAIT=0 TOTAL=0 RANG=0 NB=0
 
 preparer_progression() {
@@ -290,6 +291,12 @@ case "$cmd" in
   history)
     afficher_historique
     ;;
+  theme)
+    f="$(lister_modules | grep -E '/[0-9]{2}-theme\.sh$')"
+    preparer_progression "$f"
+    lancer_module "$f"
+    succes "Thème appliqué. Les nouvelles fenêtres de terminal le prennent ; le hub et Hyprland se mettent à jour tout seuls."
+    ;;
   version|-v|--version)
     version_courte
     ;;
@@ -315,11 +322,11 @@ case "$cmd" in
     succes "Groupe « $2 » installé."
     ;;
   aide|-h|--help)
-    sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     ;;
   *)
     printf 'Commande inconnue : « %s »\n\n' "$cmd" >&2
-    sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit 1
     ;;
 esac

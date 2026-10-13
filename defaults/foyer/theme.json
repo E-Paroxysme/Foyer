@@ -1,0 +1,53 @@
+{
+  "description": "Thème Foyer par défaut (« braise »). Ne modifie pas ce fichier : copie seulement les valeurs à changer dans ~/.config/foyer/theme.json, puis lance « foyer theme ». Couleurs en #rrggbb ; transparences de 0 (invisible) à 1 (opaque).",
+  "nom": "braise",
+  "mode": "sombre",
+  "couleurs": {
+    "accent": "#e8875a",
+    "accentClair": "#f6c27f",
+    "accentFonce": "#d9603b",
+    "texte": "#f5f0eb",
+    "panneau": "#1c1714",
+    "fondTerminal": "#16120f",
+    "succes": "#8fbf8a",
+    "danger": "#e05d5d"
+  },
+  "transparence": {
+    "panneau": 0.86,
+    "panneauEco": 0.94,
+    "carte": 0.06,
+    "carteChoisie": 0.13,
+    "trait": 0.1,
+    "discret": 0.64,
+    "terminal": 0.95
+  },
+  "police": {
+    "interface": "Geist",
+    "mono": "GeistMono Nerd Font",
+    "taille": 11
+  },
+  "arrondis": {
+    "panneau": 30,
+    "carte": 20,
+    "ligne": 12,
+    "fenetre": 12
+  },
+  "fenetres": {
+    "espaceInterieur": 5,
+    "espaceExterieur": 14,
+    "bordure": 2
+  },
+  "animations": {
+    "actives": true,
+    "duree": 380
+  },
+  "logo": {
+    "description": "Tracé SVG (24×24) du logo : la petite flamme en attendant le logo officiel.",
+    "trace": "M12 2.5c.6 2.6 2.2 4.3 3.7 6 1.4 1.6 2.3 3.2 2.3 5.4A6 6 0 0 1 6 13.9c0-2.4 1.1-4.1 2.6-5.5.2 1.7 1 2.9 2.2 3.4-.5-3.4.2-6.3 1.2-9.3z",
+    "coeur": "M12 21a2.6 2.6 0 0 0 2.6-2.6c0-1.6-1.2-2.4-1.9-3.6-.5 1.1-1.5 1.6-1.9 2.6A2.6 2.6 0 0 0 12 21z"
+  },
+  "gtk": {
+    "description": "Couleur d'accent des applications GNOME (Fichiers…) : blue, teal, green, yellow, orange, red, pink, purple ou slate.",
+    "accent": "orange"
+  }
+}
