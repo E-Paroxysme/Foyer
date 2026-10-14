@@ -5,7 +5,8 @@ hl.config({
 		gaps_out = @@fenetres.espaceExterieur@@,
 		border_size = @@fenetres.bordure@@,
 		col = {
-			active_border = "rgb(@@couleurs.accent.nu@@) rgb(@@couleurs.accentClair.nu@@) 45deg",
+			-- Couleur unie : la syntaxe des dégradés n'est pas acceptée telle quelle par la config Lua.
+			active_border = "rgb(@@couleurs.accent.nu@@)",
 			inactive_border = "rgba(ffffff1a)",
 		},
 	},
