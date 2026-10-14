@@ -6,6 +6,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 import Quickshell.Wayland
 import Quickshell.Services.Notifications
 import Quickshell.Services.Pipewire
@@ -36,6 +37,12 @@ PanelWindow {
     // fenêtre est transparent aux clics.
     mask: Region {
         item: zone
+    }
+    // Historique ouvert : un clic n'importe où ailleurs le referme.
+    HyprlandFocusGrab {
+        windows: [pastille]
+        active: pastille.historique
+        onCleared: pastille.historique = false
     }
 
     // --- Démarrage : mako s'arrête, la pastille prend les notifications --------
