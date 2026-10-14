@@ -438,6 +438,23 @@ def cmd_theme(a):
     theme_en_fond()
 
 
+# --- Disposition du hub (~/.config/foyer/disposition.json, relu tout seul par le hub)
+def cmd_disposition(a):
+    f = FOYER / "disposition.json"
+    try:
+        d = json.loads(f.read_text())
+    except (OSError, ValueError):
+        d = json.loads((FOYER_DIR / "defaults/foyer/disposition.json").read_text())
+    for paire in a.args:
+        cle, _, val = paire.partition("=")
+        if cle.startswith("widgets."):
+            d.setdefault("widgets", {})[cle.split(".", 1)[1]] = val in ("1", "true")
+        elif cle in ("entete", "bureaux", "visualiseur"):
+            d[cle] = val
+    FOYER.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n")
+
+
 # --- Applications par défaut, confidentialité, heure ----------------------------------
 def cmd_defaut(a):
     genre, appli = a.args[0], a.args[1]
@@ -681,7 +698,7 @@ def main():
         "images": cmd_images, "theme": cmd_theme, "defaut": cmd_defaut, "confidentialite": cmd_confidentialite,
         "heure": cmd_heure, "appliquer": cmd_appliquer, "avion": cmd_avion, "ecrans": cmd_ecrans, "ecran": cmd_ecran,
         "nuit": cmd_nuit, "demarrage": cmd_demarrage, "energie-etat": cmd_energie_etat, "capot": cmd_capot,
-        "limite-charge": cmd_limite_charge, "instantanes": cmd_instantanes,
+        "limite-charge": cmd_limite_charge, "instantanes": cmd_instantanes, "disposition": cmd_disposition,
     }
     if a.commande not in table:
         sys.exit("Commande inconnue : " + a.commande)

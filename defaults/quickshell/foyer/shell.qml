@@ -7,6 +7,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 
 ShellRoot {
     id: racine
@@ -58,6 +59,22 @@ ShellRoot {
             else
                 Quickshell.execDetached(["uwsm", "app", "-s", "b", "--", "mako"]);
         });
+    }
+
+    // Bouton « réduire » dessiné par l'application elle-même (LibreWolf, GTK…) :
+    // Hyprland ne réduit pas, il signale seulement la demande. On envoie alors la
+    // fenêtre sur le bureau caché des fenêtres réduites, comme le bouton des barres.
+    Connections {
+        target: Hyprland
+        function onRawEvent(ev) {
+            if (ev.name !== "minimized")
+                return;
+            const morceaux = String(ev.data).split(",");
+            if (morceaux.length < 2 || morceaux[1] !== "1")
+                return;
+            const adresse = morceaux[0].startsWith("0x") ? morceaux[0] : "0x" + morceaux[0];
+            Quickshell.execDetached(["hyprctl", "dispatch", "hl.dsp.window.move({ workspace = \"special:reduites\", follow = false, window = \"address:" + adresse + "\" })"]);
+        }
     }
 
     IpcHandler {

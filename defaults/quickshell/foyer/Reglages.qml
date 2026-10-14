@@ -15,6 +15,7 @@ Item {
     property bool actif: false
     property real hauteurMax: 560
     property var pastille: null
+    property var disposition: ({})         // donnée par le hub (disposition.json)
     signal fermer
 
     property string page: "accueil"
@@ -89,6 +90,11 @@ Item {
         if (p === "systeme") lireInstantanes();
         if (p === "agendas") lireAgendas();
     }
+    // Fait défiler la rubrique jusqu'en bas (clavier : Fin).
+    function versLeBas() {
+        defile.contentY = Math.max(0, defile.contentHeight - defile.height);
+    }
+    Keys.onPressed: e => { if (e.key === Qt.Key_End) versLeBas(); else if (e.key === Qt.Key_Home) defile.contentY = 0; }
     function retour() {
         if (choixImage !== "") {
             choixImage = "";
@@ -237,7 +243,7 @@ Item {
         case "confidentialite": return "Fichiers récents, corbeille";
         case "applications": return "Par défaut, démarrage";
         case "agendas": return "Agendas branchés";
-        case "systeme": return "Foyer " + (etat.foyer ? etat.foyer.version : "");
+        case "systeme": return "Mises à jour, instantanés";
         }
         return "";
     }
@@ -405,7 +411,7 @@ Item {
                         required property var modelData
                         Layout.fillWidth: true
                         Layout.preferredWidth: 1
-                        implicitHeight: 98
+                        implicitHeight: 112
                         radius: Theme.arrondiCarte
                         color: zoneTuile.containsMouse ? Theme.carteChoisie : Theme.carte
                         border.width: 1
@@ -414,8 +420,8 @@ Item {
                         transform: Translate { y: zoneTuile.containsMouse ? -2 : 0 }
                         ColumnLayout {
                             anchors.fill: parent
-                            anchors.margins: 13
-                            spacing: 8
+                            anchors.margins: 12
+                            spacing: 6
                             Rectangle {
                                 implicitWidth: 34
                                 implicitHeight: 34
@@ -431,7 +437,10 @@ Item {
                                 font.family: Theme.police
                                 font.pixelSize: 13
                                 font.weight: Font.DemiBold
+                                wrapMode: Text.Wrap
+                                maximumLineCount: 2
                                 elide: Text.ElideRight
+                                lineHeight: 0.95
                             }
                             Text {
                                 Layout.fillWidth: true
@@ -995,23 +1004,24 @@ Item {
                         valeur: carteEcran.reg.recopie ? "recopie" : (carteEcran.reg.position || "auto-right")
                         onChoisi: v => reglages.changerEcran(carteEcran.modelData.nom, v === "recopie" ? ["recopie=" + carteEcran.principal] : ["recopie=", "position=" + v])
                     }
-                    RowLayout {
+                    ColumnLayout {
                         Layout.fillWidth: true
                         visible: carteEcran.modelData.modes.length > 1
-                        Text { text: "Résolution"; color: Theme.texte; font.family: Theme.police; font.pixelSize: 14; Layout.fillWidth: true }
-                        Bouton {
-                            glyphe: "‹"
-                            rond: true
-                            onClic: reglages.cyclerMode(carteEcran.modelData, 1)
-                        }
-                        Text {
-                            text: (carteEcran.reg.mode || (carteEcran.modelData.largeur + "x" + carteEcran.modelData.hauteur + "@" + carteEcran.modelData.frequence)).replace("x", "×").replace("@", " · ") + " Hz"
-                            color: Theme.texte; font.family: Theme.police; font.pixelSize: 13
-                        }
-                        Bouton {
-                            glyphe: "›"
-                            rond: true
-                            onClic: reglages.cyclerMode(carteEcran.modelData, -1)
+                        spacing: 6
+                        Text { text: "Résolution"; color: Theme.texte; font.family: Theme.police; font.pixelSize: 14 }
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Repeater {
+                                model: carteEcran.modelData.modes
+                                delegate: Bouton {
+                                    required property var modelData
+                                    readonly property string actuel: carteEcran.reg.mode || (carteEcran.modelData.largeur + "x" + carteEcran.modelData.hauteur + "@" + carteEcran.modelData.frequence)
+                                    texte: modelData.replace("x", "×").replace("@", " · ") + " Hz"
+                                    plein: modelData === actuel
+                                    onClic: reglages.changerEcran(carteEcran.modelData.nom, ["mode=" + modelData])
+                                }
+                            }
                         }
                     }
                     LigneSegments {
@@ -1393,14 +1403,76 @@ Item {
             }
             Carte {
                 Layout.fillWidth: true
-                Ligne { titre: "Disposition du hub"; valeur: "Tape « personnaliser » dans la recherche" }
+                Etiquette { texte: "Disposition du hub" }
                 RowLayout {
                     Layout.fillWidth: true
-                    Item { Layout.fillWidth: true }
-                    Bouton { texte: "Revenir au thème d'origine"; onClic: reglages.changerTheme(["reinitialiser=1", "eco=0"]) }
+                    spacing: 16
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignTop
+                        spacing: 10
+                        LigneSegments {
+                            titre: "En-tête"
+                            choix: [{ nom: "Compacte", valeur: "compacte" }, { nom: "Ligne", valeur: "ligne" }, { nom: "Centrée", valeur: "centree" }]
+                            valeur: reglages.disposition.entete || "compacte"
+                            onChoisi: v => reglages.changerDisposition("entete", v)
+                        }
+                        LigneSegments {
+                            titre: "Fenêtres"
+                            choix: [{ nom: "Titres", valeur: "titres" }, { nom: "Segments", valeur: "segments" }, { nom: "Badges", valeur: "badges" }]
+                            valeur: reglages.disposition.bureaux || "titres"
+                            onChoisi: v => reglages.changerDisposition("bureaux", v)
+                        }
+                        LigneSegments {
+                            titre: "Égaliseur"
+                            choix: [{ nom: "Colonnes", valeur: "colonnes" }, { nom: "Aucun", valeur: "aucun" }]
+                            valeur: reglages.disposition.visualiseur || "colonnes"
+                            onChoisi: v => reglages.changerDisposition("visualiseur", v)
+                        }
+                        LigneInter {
+                            titre: "Lecteur de musique"
+                            aide: ""
+                            actif: !reglages.disposition.widgets || reglages.disposition.widgets.musique !== false
+                            onBascule: v => reglages.changerDisposition("widgets.musique", v ? 1 : 0)
+                        }
+                        LigneInter {
+                            titre: "Fenêtres ouvertes"
+                            aide: ""
+                            actif: !reglages.disposition.widgets || reglages.disposition.widgets.fenetres !== false
+                            onBascule: v => reglages.changerDisposition("widgets.fenetres", v ? 1 : 0)
+                        }
+                    }
+                    ColumnLayout {
+                        Layout.alignment: Qt.AlignTop
+                        spacing: 6
+                        Etiquette { texte: "Aperçu" }
+                        ApercuHub {
+                            entete: reglages.disposition.entete || "compacte"
+                            bureaux: reglages.disposition.bureaux || "titres"
+                            egaliseur: (reglages.disposition.visualiseur || "colonnes") === "colonnes"
+                            musique: !reglages.disposition.widgets || reglages.disposition.widgets.musique !== false
+                            fenetres: !reglages.disposition.widgets || reglages.disposition.widgets.fenetres !== false
+                        }
+                    }
                 }
             }
+            RowLayout {
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                Bouton { texte: "Revenir au thème d'origine"; onClic: reglages.changerTheme(["reinitialiser=1", "eco=0"]) }
+            }
         }
+    }
+    function changerDisposition(cle, v) {
+        const d = JSON.parse(JSON.stringify(disposition || {}));
+        if (cle.startsWith("widgets.")) {
+            d.widgets = d.widgets || {};
+            d.widgets[cle.slice(8)] = !!v;
+        } else {
+            d[cle] = v;
+        }
+        disposition = d;      // l'aperçu suit tout de suite ; le hub relit le fichier
+        agir(["disposition", cle + "=" + v]);
     }
     function changerTheme(args) {
         agir(["theme"].concat(args), () => reglages.lireEtat(), "Le thème n'a pas pu être appliqué.");

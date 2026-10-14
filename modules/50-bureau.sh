@@ -39,6 +39,11 @@ if command -v systemd-detect-virt >/dev/null && systemd-detect-virt -q --vm; the
   printf -- '-- Machine virtuelle : curseur dessiné par Hyprland\nhl.config({ cursor = { no_hardware_cursors = true } })\n' >>"$materiel"
   # Le pilote graphique virtuel (VMware notamment) fait planter Quickshell :
   # le hub dessine alors sans la carte graphique.
+  # VMware : outils invités (l'écran suit la taille de la fenêtre, texte net).
+  if [[ "$(systemd-detect-virt --vm)" == "vmware" ]]; then
+    pacman_installer open-vm-tools || avertir "open-vm-tools non installé."
+    activer_service vmtoolsd.service
+  fi
   mkdir -p "$FOYER_CONFIG/foyer"
   printf '# Géré par Foyer (machine virtuelle détectée).\nQT_QUICK_BACKEND=software\n' >"$FOYER_CONFIG/foyer/hub.env"
 elif grep -q 'machine virtuelle' "$FOYER_CONFIG/foyer/hub.env" 2>/dev/null; then

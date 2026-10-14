@@ -1169,12 +1169,14 @@ PanelWindow {
         // ===================== Vue réglages =====================
         Reglages {
             id: vueReglages
+            objectName: "vueReglages"
             x: 28
             y: 26
             width: parent.width - 56
             height: hub.hauteurAccueil
             hauteurMax: hub.hauteurAccueil
             pastille: hub.pastille
+            disposition: hub.disposition
             actif: hub.vue === "reglages" && hub.ouvert
             opacity: hub.vue === "reglages" ? 1 : 0
             visible: opacity > 0
