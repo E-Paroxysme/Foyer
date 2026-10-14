@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Géré par Foyer. Lance le hub (Quickshell) avec les variables de
+# ~/.config/foyer/hub.env (une par ligne, NOM=valeur) : par exemple
+# QT_QUICK_BACKEND=software dans une machine virtuelle sans accélération 3D.
+fichier="${XDG_CONFIG_HOME:-$HOME/.config}/foyer/hub.env"
+if [[ -f "$fichier" ]]; then
+  while IFS='=' read -r nom valeur; do
+    [[ "$nom" =~ ^[A-Z_][A-Z0-9_]*$ ]] && export "$nom=$valeur"
+  done <"$fichier"
+fi
+exec qs -c foyer "$@"

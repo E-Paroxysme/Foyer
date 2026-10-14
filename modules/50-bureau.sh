@@ -37,6 +37,12 @@ fi
 if command -v systemd-detect-virt >/dev/null && systemd-detect-virt -q --vm; then
   info "Machine virtuelle détectée ($(systemd-detect-virt --vm)) : curseur logiciel"
   printf -- '-- Machine virtuelle : curseur dessiné par Hyprland\nhl.config({ cursor = { no_hardware_cursors = true } })\n' >>"$materiel"
+  # Le pilote graphique virtuel (VMware notamment) fait planter Quickshell :
+  # le hub dessine alors sans la carte graphique.
+  mkdir -p "$FOYER_CONFIG/foyer"
+  printf '# Géré par Foyer (machine virtuelle détectée).\nQT_QUICK_BACKEND=software\n' >"$FOYER_CONFIG/foyer/hub.env"
+elif grep -q 'machine virtuelle' "$FOYER_CONFIG/foyer/hub.env" 2>/dev/null; then
+  rm -f "$FOYER_CONFIG/foyer/hub.env"
 fi
 deposer "$materiel" "$FOYER_CONFIG/hypr/materiel.lua"
 # Réglages faits dans le hub (veille, souris, écran) : réécrits par-dessus les fichiers par défaut.
@@ -77,7 +83,7 @@ if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
   pkill -x qs 2>/dev/null || true
   # La pastille remplace mako pour les notifications (mako reste en secours).
   pkill -x mako 2>/dev/null || true
-  (setsid env -u FOYER_DIR -u FOYER_RELANCE -u FOYER_RELAIS uwsm app -s b -- qs -c foyer >/dev/null 2>&1 &) || true
+  (setsid env -u FOYER_DIR -u FOYER_RELANCE -u FOYER_RELAIS uwsm app -s b -- "$FOYER_DIR/bin/foyer-hub" >/dev/null 2>&1 &) || true
   pkill -x swaybg 2>/dev/null || true
   (setsid env -u FOYER_DIR -u FOYER_RELANCE -u FOYER_RELAIS uwsm app -s b -- swaybg -m fill -i "$FOYER_CONFIG/foyer/fond.jpg" >/dev/null 2>&1 &) || true
   # hypridle ne relit pas sa config tout seul.

@@ -41,9 +41,19 @@ Item {
         visible: false
         layer.enabled: true
     }
+    // Rendu logiciel (machine virtuelle) : pas d'effets, photo carrée arrondie à la main.
+    readonly property bool logiciel: GraphicsInfo.api === GraphicsInfo.Software
+    Image {
+        anchors.fill: parent
+        visible: avatar.logiciel && image.status === Image.Ready
+        source: image.source
+        cache: false
+        fillMode: Image.PreserveAspectCrop
+        sourceSize.width: avatar.taille * 2
+    }
     MultiEffect {
         anchors.fill: parent
-        visible: image.status === Image.Ready
+        visible: !avatar.logiciel && image.status === Image.Ready
         source: image
         maskEnabled: true
         maskSource: masque

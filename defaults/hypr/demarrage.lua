@@ -5,7 +5,7 @@ hl.on("hyprland.start", function()
 	-- Extensions Hyprland (barres de titre) : chargées si elles sont compilées pour cette version
 	hl.exec_cmd("hyprpm reload -n")
 	-- Hub Foyer (Quickshell)
-	hl.exec_cmd("uwsm app -s b -- qs -c foyer")
+	hl.exec_cmd("uwsm app -s b -- " .. os.getenv("HOME") .. "/.local/share/foyer/bin/foyer-hub")
 	-- Notifications : gérées par la pastille du hub (mako ne démarre qu'en secours)
 	hl.exec_cmd("uwsm app -s b -t service -- hypridle")
 	-- Éclairage nocturne (horaires réglés dans le hub : ~/.config/hypr/hyprsunset.conf)
