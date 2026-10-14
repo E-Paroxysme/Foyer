@@ -410,7 +410,8 @@ Item {
                         color: zoneTuile.containsMouse ? Theme.carteChoisie : Theme.carte
                         border.width: 1
                         border.color: Theme.trait
-                        y: zoneTuile.containsMouse ? -2 : 0
+                        // Pas de « y » ici : la grille place les tuiles, on décale seulement le dessin.
+                        transform: Translate { y: zoneTuile.containsMouse ? -2 : 0 }
                         ColumnLayout {
                             anchors.fill: parent
                             anchors.margins: 13
@@ -518,6 +519,11 @@ Item {
                     titre: "Fond d'écran"
                     bouton: "Changer"
                     onAction: { reglages.choixImage = "fond"; reglages.lireImages(); }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Item { Layout.fillWidth: true }
+                    Bouton { texte: "Fond aux couleurs du thème"; onClic: reglages.agir(["fond", "theme"]) }
                 }
             }
         }

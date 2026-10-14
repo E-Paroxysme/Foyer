@@ -370,6 +370,12 @@ def cmd_photo(a):
 
 def cmd_fond(a):
     cible = FOYER / "fond.jpg"
+    if a.args and a.args[0] == "theme":
+        # Revenir au fond dessiné aux couleurs du thème
+        (FOYER / "fond.auto").write_text("")
+        theme_en_fond()
+        return
+    (FOYER / "fond.auto").unlink(missing_ok=True)
     m = magick()
     code = lancer([m, a.args[0] + "[0]", "-auto-orient", "-quality", "92", str(cible)]) if m else 1
     if code != 0:

@@ -135,6 +135,33 @@ rendre "$M/cava.conf"      "$FOYER_CONFIG/foyer/cava.conf"
 rendre "$M/hyprlock.conf"  "$FOYER_CONFIG/hypr/hyprlock.conf"
 rendre "$M/session.sh"     "$FOYER_CONFIG/foyer/session-theme.sh"
 
+# --- Fond d'écran aux couleurs du thème ------------------------------------------
+# Tant que tu n'as pas choisi ton propre fond (fichier repère fond.auto), le fond
+# est dessiné avec les couleurs du thème, comme sur les maquettes.
+generer_fond() {
+  local fond="$FOYER_CONFIG/foyer/fond.jpg" repere="$FOYER_CONFIG/foyer/fond.auto" empreinte
+  # Ancien fond par défaut encore en place : il devient automatique.
+  if [[ ! -f "$fond" ]] || cmp -s "$fond" "$D/fonds/braise.jpg"; then
+    : >"$repere"
+  fi
+  [[ -f "$repere" ]] || return 0
+  empreinte="$(valeur couleurs.accent) $(valeur couleurs.accentFonce) $(valeur couleurs.panneau) v1"
+  [[ -f "$fond" && "$(cat "$repere")" == "$empreinte" ]] && return 0
+  info "Thème : fond d'écran aux couleurs du thème"
+  if "$FOYER_DIR/bin/foyer-fond" "$(valeur couleurs.accent)" "$(valeur couleurs.accentFonce)" "$(valeur couleurs.panneau)" "$fond.tmp.jpg"; then
+    mv -f "$fond.tmp.jpg" "$fond"
+    echo "$empreinte" >"$repere"
+    if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+      pkill -x swaybg 2>/dev/null || true
+      (setsid env -u FOYER_DIR -u FOYER_RELANCE -u FOYER_RELAIS uwsm app -s b -- swaybg -m fill -i "$fond" >/dev/null 2>&1 &) || true
+    fi
+  else
+    rm -f "$fond.tmp.jpg"
+    avertir "Fond d'écran du thème non généré."
+  fi
+}
+generer_fond || true
+
 # --- Image de l'écran de verrouillage -----------------------------------------
 # Fond d'écran + icône du compte au centre ; la moitié droite est floutée (verre).
 # Refaite seulement si le fond, l'icône ou la couleur ont changé.

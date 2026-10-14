@@ -12,7 +12,23 @@ hl.config({
 	},
 	decoration = {
 		rounding = @@arrondis.fenetre@@,
+		-- Flou « verre dépoli » plus vif, comme sur les maquettes (saturate).
+		blur = {
+			size = 8,
+			passes = 3,
+			vibrancy = 0.35,
+			vibrancy_darkness = 0.2,
+		},
 	},
+})
+
+-- Le hub et la pastille floutent ce qui est derrière eux (le profil économe coupe
+-- le flou partout). ignore_alpha : seules les parties presque opaques sont floutées.
+pcall(hl.layer_rule, {
+	name = "foyer-verre",
+	match = { namespace = "^foyer-(hub|pastille)$" },
+	blur = true,
+	ignore_alpha = 0.3,
 })
 
 -- Barres de titre (extension hyprbars) : réduire, agrandir, fermer pour toutes les

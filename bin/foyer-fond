@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+# Géré par Foyer. Fond d'écran aux couleurs du thème, comme sur les maquettes :
+# lueur chaude en bas à droite, halo de l'accent en haut à gauche, fond sombre.
+#   foyer-fond ACCENT ACCENT_FONCE PANNEAU sortie.jpg [largeur hauteur]
+import math
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+
+def rgb(h):
+    h = h.lstrip("#")
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def melange(a, b, k):
+    return tuple(a[i] * (1 - k) + b[i] * k for i in range(3))
+
+
+def main():
+    accent, fonce, panneau = rgb(sys.argv[1]), rgb(sys.argv[2]), rgb(sys.argv[3])
+    sortie = sys.argv[4]
+    W, H = (int(sys.argv[5]), int(sys.argv[6])) if len(sys.argv) > 6 else (2560, 1440)
+    noir = (0, 0, 0)
+    chaud = melange(fonce, noir, 0.10)
+    moyen = melange(fonce, noir, 0.50)
+    sombre = melange(panneau, noir, 0.05)
+    # Calcul en petit (le dégradé est doux), agrandi ensuite par ImageMagick.
+    w, h = 384, 216
+    pixels = bytearray()
+    cx, cy, rx, ry = 0.80 * w, 1.0 * h, 0.90 * w, 0.80 * h
+    gx, gy, gr = 0.148 * w, 0.19 * h, 0.24 * w
+    for y in range(h):
+        for x in range(w):
+            t = math.hypot((x - cx) / rx, (y - cy) / ry)
+            if t <= 0.35:
+                c = melange(chaud, moyen, t / 0.35)
+            elif t <= 0.70:
+                c = melange(moyen, sombre, (t - 0.35) / 0.35)
+            else:
+                c = sombre
+            d = math.hypot(x - gx, y - gy)
+            k = min(1.0, max(0.0, (d - gr * 0.55) / (gr * 0.9)))
+            halo = 0.18 * (1 - k * k * (3 - 2 * k))
+            c = melange(c, accent, halo)
+            pixels += bytes(max(0, min(255, round(v))) for v in c)
+    magick = shutil.which("magick") or shutil.which("convert")
+    if not magick:
+        sys.exit("ImageMagick absent")
+    with tempfile.TemporaryDirectory() as tmp:
+        ppm = os.path.join(tmp, "f.ppm")
+        with open(ppm, "wb") as f:
+            f.write(f"P6 {w} {h} 255\n".encode() + bytes(pixels))
+        # Léger grain pour éviter les bandes de couleur sur les grands écrans.
+        code = subprocess.run([magick, ppm, "-filter", "Gaussian", "-resize", f"{W}x{H}!", "-blur", "0x6",
+                               "-attenuate", "0.25", "+noise", "Gaussian", "-quality", "92", sortie]).returncode
+    sys.exit(code)
+
+
+if __name__ == "__main__":
+    main()
