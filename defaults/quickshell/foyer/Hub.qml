@@ -29,9 +29,6 @@ PanelWindow {
     property bool cavaDispo: false
     property var barres: []
     property date maintenant: new Date()
-    property int moisDecalage: 0
-    property date dateRef: new Date()
-    property int jourChoisi: 0
 
     readonly property string home: Quickshell.env("HOME")
     readonly property bool enRecherche: recherche.text.length > 0
@@ -64,8 +61,6 @@ PanelWindow {
         if (ouvert) {
             maintenant = new Date();
             vue = "accueil";
-            moisDecalage = 0;
-            jourChoisi = 0;
             recherche.text = "";
             selection = 0;
             curseur = -1;
@@ -383,8 +378,7 @@ PanelWindow {
 
     function lateral(sens) {
         if (vue === "calendrier") {
-            moisDecalage += sens;
-            jourChoisi = 0;
+            vueCalendrier.decaler(sens);
             return true;
         }
         if (enRecherche || curseur < 0 || curseur >= nbTuiles)
@@ -445,36 +439,13 @@ PanelWindow {
     }
 
     // --- Calendrier (interne pour l'instant) --------------------------------
-    readonly property date moisAffiche: new Date(dateRef.getFullYear(), dateRef.getMonth() + moisDecalage, 1)
-    readonly property int jourAffiche: jourChoisi > 0 ? jourChoisi : (moisDecalage === 0 ? dateRef.getDate() : 1)
-
     // Hauteur du hub au moment d'ouvrir le calendrier : le calendrier tient dedans
     // (il se réduit au besoin) au lieu d'agrandir le hub jusqu'au bord de l'écran.
-    readonly property real hauteurAccueil: Math.max(420, vueAccueil.implicitHeight)
+    readonly property real hauteurAccueil: Math.max(540, vueAccueil.implicitHeight)
     function ouvrirCalendrier() {
-        dateRef = new Date();
-        moisDecalage = 0;
-        jourChoisi = 0;
         vue = "calendrier";
+        vueCalendrier.ouvrir();
     }
-    readonly property var nomsMois: ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
-    readonly property var nomsJours: ["dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."]
-
-    function casesMois() {
-        const an = moisAffiche.getFullYear(), m = moisAffiche.getMonth();
-        const premier = (new Date(an, m, 1).getDay() + 6) % 7;
-        const nb = new Date(an, m + 1, 0).getDate();
-        const auj = new Date(dateRef.getFullYear(), dateRef.getMonth(), dateRef.getDate()).getTime();
-        const cases = [];
-        for (let i = 0; i < premier; i++)
-            cases.push({ jour: 0 });
-        for (let j = 1; j <= nb; j++) {
-            const t = new Date(an, m, j).getTime();
-            cases.push({ jour: j, passe: t < auj, aujourdhui: t === auj });
-        }
-        return cases;
-    }
-
     // --- Interface ----------------------------------------------------------
     Rectangle {
         anchors.fill: parent
@@ -1144,169 +1115,19 @@ PanelWindow {
         }
 
         // ===================== Vue calendrier =====================
-        ColumnLayout {
+        Agenda {
             id: vueCalendrier
-            // Échelle pour tenir dans la hauteur du hub (jamais agrandi au-delà de 1).
-            readonly property real echelle: implicitHeight > 0 ? Math.min(1, hub.hauteurAccueil / implicitHeight) : 1
-            x: 40
+            x: 28
             y: 26
-            width: (parent.width - 80) / echelle
-            scale: echelle
-            transformOrigin: Item.TopLeft
-            spacing: 20
-            opacity: hub.vue === "calendrier" ? 1 : 0
+            width: parent.width - 56
+            hauteurMax: hub.hauteurAccueil
+            actif: hub.vue === "calendrier"
+            opacity: actif ? 1 : 0
             visible: opacity > 0
             Behavior on opacity {
                 NumberAnimation { duration: Theme.duree }
             }
-
-            // Le numéro du jour grandit depuis l'en-tête
-            Text {
-                text: hub.jourAffiche
-                color: Theme.texte
-                font.family: Theme.police
-                font.pixelSize: 132
-                font.weight: Font.ExtraBold
-                font.letterSpacing: -6
-                transformOrigin: Item.TopLeft
-                scale: hub.vue === "calendrier" ? 1 : 0.14
-                Behavior on scale {
-                    NumberAnimation {
-                        duration: Theme.duree * 1.3
-                        easing.type: Easing.OutCubic
-                    }
-                }
-                Layout.preferredHeight: 116
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                ColumnLayout {
-                    spacing: 0
-                    Text {
-                        text: hub.nomsMois[hub.moisAffiche.getMonth()].toUpperCase()
-                        color: Theme.texte
-                        font.family: Theme.police
-                        font.pixelSize: 26
-                        font.weight: Font.Medium
-                        font.letterSpacing: 0.5
-                    }
-                    Text {
-                        text: hub.moisAffiche.getFullYear()
-                        color: Theme.discret
-                        font.family: Theme.police
-                        font.pixelSize: 26
-                        font.weight: Font.Light
-                    }
-                }
-                Item {
-                    Layout.fillWidth: true
-                }
-                Text {
-                    Layout.alignment: Qt.AlignBottom
-                    text: hub.nomsJours[new Date(hub.moisAffiche.getFullYear(), hub.moisAffiche.getMonth(), hub.jourAffiche).getDay()]
-                    color: Theme.texte
-                    font.family: Theme.police
-                    font.pixelSize: 26
-                }
-            }
-
-            Row {
-                spacing: 8
-                Bouton {
-                    glyphe: "‹"
-                    rond: true
-                    onClic: {
-                        hub.moisDecalage--;
-                        hub.jourChoisi = 0;
-                    }
-                }
-                Bouton {
-                    glyphe: "›"
-                    rond: true
-                    onClic: {
-                        hub.moisDecalage++;
-                        hub.jourChoisi = 0;
-                    }
-                }
-            }
-
-            GridLayout {
-                Layout.fillWidth: true
-                columns: 7
-                columnSpacing: 8
-                rowSpacing: 10
-
-                Repeater {
-                    model: ["L", "M", "M", "J", "V", "S", "D"]
-                    delegate: Text {
-                        required property var modelData
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 1   // colonnes de largeur égale
-                        horizontalAlignment: Text.AlignHCenter
-                        text: modelData
-                        color: Theme.discret
-                        font.family: Theme.police
-                        font.pixelSize: 13
-                        font.weight: Font.Medium
-                    }
-                }
-                Repeater {
-                    model: hub.vue === "calendrier" ? hub.casesMois() : []
-                    delegate: Item {
-                        id: caseJour
-                        required property var modelData
-                        required property int index
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: 1
-                        Layout.preferredHeight: 50
-                        Rectangle {
-                            id: rond
-                            visible: caseJour.modelData.jour > 0
-                            anchors.centerIn: parent
-                            width: 48
-                            height: 48
-                            radius: 24
-                            color: caseJour.modelData.aujourdhui ? Theme.accent : (caseJour.modelData.passe ? Theme.texte : "transparent")
-                            border.width: caseJour.modelData.aujourdhui || caseJour.modelData.passe ? 0 : 1.5
-                            border.color: Qt.rgba(Theme.texte.r, Theme.texte.g, Theme.texte.b, 0.22)
-                            opacity: 0
-                            scale: 0.4
-                            SequentialAnimation {
-                                id: apparition
-                                PauseAnimation { duration: Theme.duree * 0.4 + caseJour.index * (Theme.eco ? 0 : 12) }
-                                ParallelAnimation {
-                                    NumberAnimation { target: rond; property: "opacity"; to: 1; duration: 220 }
-                                    NumberAnimation { target: rond; property: "scale"; to: 1; duration: 260; easing.type: Easing.OutBack }
-                                }
-                            }
-                            Component.onCompleted: apparition.start()
-                            Rectangle {
-                                anchors.centerIn: parent
-                                visible: caseJour.modelData.jour === hub.jourChoisi && !caseJour.modelData.aujourdhui
-                                width: 54
-                                height: 54
-                                radius: 27
-                                color: "transparent"
-                                border.width: 2
-                                border.color: Theme.accent
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: hub.jourChoisi = caseJour.modelData.jour
-                            }
-                        }
-                    }
-                }
-            }
-
-            Text {
-                Layout.alignment: Qt.AlignHCenter
-                text: "← → mois précédent / suivant · Échap pour revenir"
-                color: Theme.discret
-                font.family: Theme.police
-                font.pixelSize: 11
-            }
+            onFermer: hub.echap()
         }
     }
 }

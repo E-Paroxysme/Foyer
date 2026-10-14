@@ -1,0 +1,8 @@
+# Géré par Foyer : synchronise les agendas branchés (CalDAV, liens iCal).
+[Unit]
+Description=Foyer : synchronisation des agendas
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/share/foyer/bin/foyer-agenda synchroniser --silencieux

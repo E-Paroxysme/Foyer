@@ -1,0 +1,10 @@
+# Géré par Foyer.
+[Unit]
+Description=Foyer : rappels de l'agenda chaque minute
+
+[Timer]
+OnCalendar=*:*:00
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

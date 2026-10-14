@@ -6,6 +6,7 @@
 #   foyer modules            liste les modules disponibles
 #   foyer groupes            liste les groupes de logiciels optionnels
 #   foyer installer <groupe> installe un groupe optionnel (ex. : foyer installer si)
+#   foyer agenda brancher    branche un agenda (CalDAV ou lien iCal) ; aussi : liste, retirer, synchroniser
 #   foyer theme liste        liste les thèmes disponibles
 #   foyer theme <nom>        choisit un thème (ex. : foyer theme ocean)
 #   foyer theme              réapplique le thème (après avoir modifié ~/.config/foyer/theme.json)
@@ -34,7 +35,7 @@ lister_modules() {
 nom_module() { basename "$1" .sh | cut -d- -f2-; }
 
 # Poids de chaque module dans la progression globale (le volume réel de travail).
-declare -A POIDS=([depots]=10 [pilotes]=5 [paquets]=60 [vie-privee]=4 [theme]=3 [bureau]=4 [barres]=8 [services]=2 [instantanes]=15)
+declare -A POIDS=([depots]=10 [pilotes]=5 [paquets]=60 [vie-privee]=4 [theme]=3 [bureau]=4 [barres]=8 [agenda]=2 [services]=2 [instantanes]=15)
 FAIT=0 TOTAL=0 RANG=0 NB=0
 
 preparer_progression() {
@@ -294,6 +295,10 @@ case "$cmd" in
   history)
     afficher_historique
     ;;
+  agenda)
+    shift
+    exec "$FOYER_DIR/bin/foyer-agenda" "${@:-liste}"
+    ;;
   theme)
     perso="$FOYER_CONFIG/foyer/theme.json"
     actuel="$(jq -r '.base // "braise"' "$perso" 2>/dev/null || echo braise)"
@@ -345,11 +350,11 @@ case "$cmd" in
     succes "Groupe « $2 » installé."
     ;;
   aide|-h|--help)
-    sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     ;;
   *)
     printf 'Commande inconnue : « %s »\n\n' "$cmd" >&2
-    sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit 1
     ;;
 esac

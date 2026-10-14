@@ -155,6 +155,18 @@ applications restent les officielles.
 Icône du compte (écran de verrouillage) : une image carrée dans `~/.face`, puis
 `foyer theme`. Sans elle, un rond aux couleurs du thème.
 
+Agenda : clic sur la date du hub. Ajoute un événement en une phrase
+(« lundi de 14h à 15h réunion https://… // salle B12 » : la date, les heures, le
+lien de visio et la note après `//` sont reconnus). Les événements sont des
+fichiers `.ics` dans `~/.local/share/foyer/agenda/personnel`. Pour brancher un
+agenda extérieur : `foyer agenda brancher` (ou le lien en bas du calendrier).
+Lien iCal (Pronote, ENT, agenda Proton partagé) = lecture seule ; compte CalDAV
+(Nextcloud, Google, iCloud, Infomaniak…) = lecture et écriture. Synchronisation
+toutes les 15 minutes, rappel dans la pastille 15 minutes avant chaque événement.
+Autres commandes : `foyer agenda liste`, `foyer agenda retirer <nom>`,
+`foyer agenda synchroniser`. Le mot de passe CalDAV est rangé dans
+`~/.config/foyer/agendas/` (lisible par toi seul).
+
 Barres de titre : toutes les fenêtres reçoivent réduire / agrandir / fermer grâce à
 l'extension officielle hyprbars, compilée par `hyprpm` (module `barres`, à lancer
 depuis la session : `foyer update barres`). Une fenêtre réduite se retrouve dans

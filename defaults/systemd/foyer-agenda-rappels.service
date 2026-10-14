@@ -1,0 +1,7 @@
+# Géré par Foyer : prévient 15 minutes avant un événement (dans la pastille).
+[Unit]
+Description=Foyer : rappels de l'agenda
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/share/foyer/bin/foyer-agenda rappels

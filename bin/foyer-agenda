@@ -1,0 +1,357 @@
+#!/usr/bin/env python3
+# Géré par Foyer. Agenda du hub : lit les événements (khal), en ajoute ou en supprime
+# (fichiers .ics), envoie les rappels, et branche des agendas extérieurs
+# (CalDAV en lecture et écriture, liens iCal en lecture seule) avec vdirsyncer.
+#
+#   foyer-agenda mois 2026-10            événements du mois, en JSON (pour le hub)
+#   foyer-agenda ajouter --date 2026-10-14 --debut 14:00 --fin 15:00 --titre "…" [--lien URL] [--note "…"] [--agenda personnel]
+#   foyer-agenda supprimer UID
+#   foyer-agenda rappels                 notifie les événements qui commencent bientôt
+#   foyer-agenda liste | brancher | retirer NOM | synchroniser | regenerer
+import argparse
+import datetime as dt
+import getpass
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import uuid
+from pathlib import Path
+
+HOME = Path.home()
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "foyer"
+DONNEES = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local/share")) / "foyer/agenda"
+CACHE = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / "foyer"
+ETAT = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "foyer"
+FICHIER = CONFIG / "agendas.json"
+SECRETS = CONFIG / "agendas"
+KHAL = CACHE / "khal.conf"
+VDIR = CACHE / "vdirsyncer.conf"
+PALETTE = ["#8fa8c8", "#b59ae6", "#8fc3bd", "#d9b26a", "#e08a8a", "#9cc48f"]
+VISIO = re.compile(r"https?://\S*(meet|zoom|teams|jit\.si|visio|webex|bbb|bigbluebutton|whereby|rendez-vous)\S*", re.I)
+LIEN = re.compile(r"https?://\S+", re.I)
+
+
+def lire_conf():
+    try:
+        return json.loads(FICHIER.read_text())
+    except (OSError, ValueError):
+        return {"sources": []}
+
+
+def ecrire_conf(conf):
+    CONFIG.mkdir(parents=True, exist_ok=True)
+    FICHIER.write_text(json.dumps(conf, ensure_ascii=False, indent=2) + "\n")
+
+
+def fuseau():
+    try:
+        cible = os.path.realpath("/etc/localtime")
+        return cible.split("zoneinfo/", 1)[1]
+    except (OSError, IndexError):
+        return "Europe/Paris"
+
+
+def calendriers(conf):
+    """Liste des agendas réellement présents : [(id, chemin, nom, couleur, modifiable, source)]."""
+    res = [("personnel", DONNEES / "personnel", "Personnel", "", True, "sur ce PC")]
+    for i, s in enumerate(conf.get("sources", [])):
+        couleur = s.get("couleur") or PALETTE[i % len(PALETTE)]
+        base = DONNEES / s["nom"]
+        if s["type"] == "ical":
+            res.append((s["nom"], base, s.get("titre", s["nom"]), couleur, False, "lien iCal"))
+        else:
+            sous = sorted(p for p in base.glob("*") if p.is_dir()) if base.is_dir() else []
+            for j, p in enumerate(sous):
+                nom = s.get("titre", s["nom"]) + ("" if len(sous) == 1 else " · " + p.name)
+                coul = couleur if j == 0 else PALETTE[(i + j) % len(PALETTE)]
+                res.append((s["nom"] + "-" + p.name, p, nom, coul, True, "CalDAV"))
+    return res
+
+
+def regenerer(conf=None):
+    conf = conf or lire_conf()
+    (DONNEES / "personnel").mkdir(parents=True, exist_ok=True)
+    CACHE.mkdir(parents=True, exist_ok=True)
+    tz = fuseau()
+    lignes = ["# Généré par foyer-agenda (ne pas modifier).", "[calendars]"]
+    for cid, chemin, _nom, couleur, modifiable, _src in calendriers(conf):
+        chemin.mkdir(parents=True, exist_ok=True)
+        lignes += [f"[[{cid}]]", f"path = {chemin}"]
+        if couleur:
+            lignes.append(f"color = '{couleur}'")
+        if not modifiable:
+            lignes.append("readonly = True")
+    lignes += [
+        "[locale]", "timeformat = %H:%M", "dateformat = %Y-%m-%d", "longdateformat = %Y-%m-%d",
+        "datetimeformat = %Y-%m-%d %H:%M", "longdatetimeformat = %Y-%m-%d %H:%M",
+        f"local_timezone = {tz}", f"default_timezone = {tz}",
+        "[sqlite]", f"path = {CACHE / 'khal.db'}",
+    ]
+    KHAL.write_text("\n".join(lignes) + "\n")
+
+    v = ["# Généré par foyer-agenda (ne pas modifier).", "[general]", f'status_path = "{ETAT / "vdirsyncer"}"']
+    for s in conf.get("sources", []):
+        n = s["nom"]
+        local = DONNEES / n
+        if s["type"] == "ical":
+            v += [f"[pair {n}]", f'a = "{n}_distant"', f'b = "{n}_local"', "collections = null",
+                  'conflict_resolution = "a wins"',
+                  f"[storage {n}_distant]", 'type = "http"', f'url = "{s["url"]}"',
+                  f"[storage {n}_local]", 'type = "filesystem"', f'path = "{local}"', 'fileext = ".ics"']
+        else:
+            v += [f"[pair {n}]", f'a = "{n}_distant"', f'b = "{n}_local"', 'collections = ["from a"]',
+                  'conflict_resolution = "a wins"', 'metadata = ["displayname", "color"]',
+                  f"[storage {n}_distant]", 'type = "caldav"', f'url = "{s["url"]}"',
+                  f'username = "{s.get("utilisateur", "")}"',
+                  f'password.fetch = ["command", "cat", "{SECRETS / (n + ".mdp")}"]',
+                  f"[storage {n}_local]", 'type = "filesystem"', f'path = "{local}"', 'fileext = ".ics"']
+    VDIR.write_text("\n".join(v) + "\n")
+
+
+def khal_json(debut, fin):
+    champs = ["uid", "title", "start", "end", "all-day", "calendar", "url", "description", "location"]
+    cmd = ["khal", "-c", str(KHAL), "list"] + sum((["--json", c] for c in champs), []) + [debut, fin]
+    try:
+        sortie = subprocess.run(cmd, capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    vus, res = set(), []
+    for ligne in sortie.splitlines():
+        ligne = ligne.strip()
+        if not ligne.startswith("["):
+            continue
+        try:
+            for e in json.loads(ligne):
+                cle = (e.get("uid"), e.get("start"), e.get("calendar"))
+                if cle not in vus:
+                    vus.add(cle)
+                    res.append(e)
+        except ValueError:
+            pass
+    return res
+
+
+def evenement(e):
+    journee = e.get("all-day") == "True"
+    d, _, h = e.get("start", "").partition(" ")
+    df, _, hf = e.get("end", "").partition(" ")
+    texte = (e.get("description") or "").strip()
+    lien = e.get("url") or ""
+    if not lien:
+        m = VISIO.search(texte + " " + (e.get("location") or "")) or LIEN.search(texte)
+        if m:
+            lien = m.group(0)
+    note = texte.replace(lien, "").strip() if lien else texte
+    if e.get("location") and e["location"] not in note and e["location"] != lien:
+        note = (e["location"] + ("\n" + note if note else "")).strip()
+    return {
+        "uid": e.get("uid", ""), "agenda": e.get("calendar", ""), "titre": e.get("title", ""),
+        "date": d, "dateFin": df, "debut": "" if journee else h, "fin": "" if journee else hf,
+        "journee": journee, "lien": lien, "visio": bool(lien and VISIO.search(lien)), "note": note,
+    }
+
+
+def cmd_mois(args):
+    conf = lire_conf()
+    if not KHAL.exists():
+        regenerer(conf)
+    an, mois = (int(x) for x in args.mois.split("-"))
+    premier = dt.date(an, mois, 1)
+    nb = (dt.date(an + mois // 12, mois % 12 + 1, 1) - premier).days
+    evts = [evenement(e) for e in khal_json(premier.isoformat(), f"{nb}d")]
+    masques = set(conf.get("masques", []))
+    agendas = [{"id": c[0], "nom": c[2], "couleur": c[3], "modifiable": c[4], "source": c[5], "visible": c[0] not in masques}
+               for c in calendriers(conf)]
+    print(json.dumps({"agendas": agendas, "evenements": evts}, ensure_ascii=False))
+
+
+def echap(t):
+    return t.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+
+def cmd_ajouter(args):
+    conf = lire_conf()
+    regenerer(conf)
+    cible = next((c for c in calendriers(conf) if c[0] == args.agenda and c[4]), None)
+    if not cible:
+        sys.exit(f"Agenda non modifiable ou inconnu : {args.agenda}")
+    uid = f"{uuid.uuid4()}@foyer"
+    maintenant = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    d = dt.date.fromisoformat(args.date)
+    tz = fuseau()
+    l = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Foyer//Agenda//FR", "BEGIN:VEVENT",
+         f"UID:{uid}", f"DTSTAMP:{maintenant}", f"CREATED:{maintenant}"]
+    if args.debut:
+        hd = dt.time.fromisoformat(args.debut)
+        hf = dt.time.fromisoformat(args.fin) if args.fin else (dt.datetime.combine(d, hd) + dt.timedelta(hours=1)).time()
+        fin_d = d if hf > hd else d + dt.timedelta(days=1)
+        l += [f"DTSTART;TZID={tz}:{d:%Y%m%d}T{hd:%H%M}00", f"DTEND;TZID={tz}:{fin_d:%Y%m%d}T{hf:%H%M}00"]
+    else:
+        l += [f"DTSTART;VALUE=DATE:{d:%Y%m%d}", f"DTEND;VALUE=DATE:{d + dt.timedelta(days=1):%Y%m%d}"]
+    l.append("SUMMARY:" + echap(args.titre))
+    if args.lien:
+        l.append("URL:" + args.lien)
+    if args.note:
+        l.append("DESCRIPTION:" + echap(args.note))
+    l += ["END:VEVENT", "END:VCALENDAR"]
+    (cible[1] / f"{uid}.ics").write_text("\r\n".join(l) + "\r\n")
+    if cible[5] == "CalDAV":
+        synchroniser_fond()
+    print(uid)
+
+
+def cmd_supprimer(args):
+    conf = lire_conf()
+    for c in calendriers(conf):
+        if not c[4]:
+            continue
+        for f in c[1].glob("*.ics"):
+            try:
+                if re.search(r"^UID:" + re.escape(args.uid) + r"\s*$", f.read_text(errors="ignore"), re.M):
+                    f.unlink()
+                    if c[5] == "CalDAV":
+                        synchroniser_fond()
+                    return
+            except OSError:
+                pass
+    sys.exit("Événement introuvable ou en lecture seule.")
+
+
+def cmd_rappels(args):
+    if not KHAL.exists():
+        regenerer()
+    maintenant = dt.datetime.now()
+    deja_f = ETAT / "agenda-rappels.json"
+    try:
+        deja = set(json.loads(deja_f.read_text()))
+    except (OSError, ValueError):
+        deja = set()
+    for e in map(evenement, khal_json(maintenant.date().isoformat(), "1d")):
+        if e["journee"] or not e["debut"]:
+            continue
+        debut = dt.datetime.fromisoformat(e["date"] + " " + e["debut"])
+        ecart = (debut - maintenant).total_seconds() / 60
+        cle = e["uid"] + e["date"] + e["debut"]
+        if 0 <= ecart <= args.minutes and cle not in deja:
+            corps = f"À {e['debut']}" + (" · visio" if e["visio"] else "")
+            try:
+                subprocess.run(["notify-send", "-a", "Agenda", e["titre"], corps], check=False)
+            except OSError:
+                print(e["titre"], corps)
+            deja.add(cle)
+    ETAT.mkdir(parents=True, exist_ok=True)
+    deja_f.write_text(json.dumps(sorted(deja)[-200:]))
+
+
+def synchroniser(silencieux=False):
+    if not lire_conf().get("sources"):
+        return
+    if not shutil.which("vdirsyncer"):
+        print("vdirsyncer absent.", file=sys.stderr)
+        return
+    regenerer()
+    env = dict(os.environ, VDIRSYNCER_CONFIG=str(VDIR))
+    sortie = None if not silencieux else subprocess.DEVNULL
+    # « discover » demande s'il faut créer les dossiers locaux : oui.
+    subprocess.run(["vdirsyncer", "discover"], input="y\n" * 50, text=True, env=env, stdout=sortie, stderr=sortie, check=False)
+    subprocess.run(["vdirsyncer", "metasync"], env=env, stdout=sortie, stderr=sortie, check=False)
+    subprocess.run(["vdirsyncer", "sync"], env=env, stdout=sortie, stderr=sortie, check=False)
+    regenerer()
+
+
+def synchroniser_fond():
+    subprocess.Popen([sys.argv[0], "synchroniser", "--silencieux"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
+
+def cmd_liste(_args):
+    conf = lire_conf()
+    for c in calendriers(conf):
+        print(f"  {c[0]:<20} {c[2]:<24} {c[5]}{'' if c[4] else ' (lecture seule)'}")
+
+
+def nom_valide(t):
+    n = re.sub(r"[^a-z0-9]+", "-", t.lower()).strip("-")
+    return n or "agenda"
+
+
+def cmd_brancher(_args):
+    conf = lire_conf()
+    print("Brancher un agenda\n")
+    print("  1) Lien iCal (lecture seule) : Pronote, emploi du temps de l'ENT, agenda Proton partagé…")
+    print("  2) Compte CalDAV (lecture et écriture) : Nextcloud, Google, iCloud, Infomaniak, Fastmail…\n")
+    choix = input("Ton choix (1 ou 2) : ").strip()
+    if choix not in ("1", "2"):
+        sys.exit("Annulé.")
+    titre = input("Nom affiché (ex. Pronote) : ").strip() or "Agenda"
+    nom = nom_valide(titre)
+    if nom == "personnel" or any(s["nom"] == nom for s in conf["sources"]):
+        nom += "-" + uuid.uuid4().hex[:4]
+    url = input("Adresse (https://…) : ").strip()
+    if url.startswith("webcal://"):
+        url = "https://" + url[len("webcal://"):]
+    if not url.startswith("http"):
+        sys.exit("Adresse invalide.")
+    source = {"nom": nom, "titre": titre, "type": "ical" if choix == "1" else "caldav", "url": url,
+              "couleur": PALETTE[len(conf["sources"]) % len(PALETTE)]}
+    if choix == "2":
+        source["utilisateur"] = input("Identifiant : ").strip()
+        mdp = getpass.getpass("Mot de passe (ou mot de passe d'application) : ")
+        SECRETS.mkdir(parents=True, exist_ok=True)
+        os.chmod(SECRETS, 0o700)
+        f = SECRETS / (nom + ".mdp")
+        f.write_text(mdp)
+        os.chmod(f, 0o600)
+    conf["sources"].append(source)
+    ecrire_conf(conf)
+    print("\nSynchronisation…")
+    synchroniser()
+    print(f"\n« {titre} » est branché. Il se met à jour tout seul toutes les 15 minutes.")
+
+
+def cmd_retirer(args):
+    conf = lire_conf()
+    avant = len(conf["sources"])
+    conf["sources"] = [s for s in conf["sources"] if s["nom"] != args.nom]
+    if len(conf["sources"]) == avant:
+        sys.exit(f"Agenda inconnu : {args.nom} (voir : foyer agenda liste)")
+    ecrire_conf(conf)
+    shutil.rmtree(DONNEES / args.nom, ignore_errors=True)
+    (SECRETS / (args.nom + ".mdp")).unlink(missing_ok=True)
+    regenerer(conf)
+    print(f"« {args.nom} » est débranché.")
+
+
+def cmd_masquer(args):
+    conf = lire_conf()
+    masques = set(conf.get("masques", []))
+    masques.symmetric_difference_update({args.id})
+    conf["masques"] = sorted(masques)
+    ecrire_conf(conf)
+
+
+def main():
+    p = argparse.ArgumentParser(prog="foyer agenda")
+    sp = p.add_subparsers(dest="commande", required=True)
+    m = sp.add_parser("mois"); m.add_argument("mois"); m.set_defaults(f=cmd_mois)
+    a = sp.add_parser("ajouter")
+    a.add_argument("--date", required=True); a.add_argument("--debut", default=""); a.add_argument("--fin", default="")
+    a.add_argument("--titre", required=True); a.add_argument("--lien", default=""); a.add_argument("--note", default="")
+    a.add_argument("--agenda", default="personnel"); a.set_defaults(f=cmd_ajouter)
+    s = sp.add_parser("supprimer"); s.add_argument("uid"); s.set_defaults(f=cmd_supprimer)
+    r = sp.add_parser("rappels"); r.add_argument("--minutes", type=int, default=15); r.set_defaults(f=cmd_rappels)
+    sp.add_parser("liste").set_defaults(f=cmd_liste)
+    sp.add_parser("brancher").set_defaults(f=cmd_brancher)
+    t = sp.add_parser("retirer"); t.add_argument("nom"); t.set_defaults(f=cmd_retirer)
+    k = sp.add_parser("masquer"); k.add_argument("id"); k.set_defaults(f=cmd_masquer)
+    y = sp.add_parser("synchroniser"); y.add_argument("--silencieux", action="store_true")
+    y.set_defaults(f=lambda a: synchroniser(a.silencieux))
+    sp.add_parser("regenerer").set_defaults(f=lambda a: regenerer())
+    args = p.parse_args()
+    args.f(args)
+
+
+if __name__ == "__main__":
+    main()

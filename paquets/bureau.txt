@@ -58,3 +58,7 @@ papirus-icon-theme
 cmake
 meson
 cpio
+# Agenda du hub (lecture des agendas, synchronisation CalDAV / iCal)
+khal
+vdirsyncer
+libnotify
