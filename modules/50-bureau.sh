@@ -73,6 +73,9 @@ if [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
   (setsid env -u FOYER_DIR -u FOYER_RELANCE -u FOYER_RELAIS uwsm app -s b -- qs -c foyer >/dev/null 2>&1 &) || true
   pkill -x swaybg 2>/dev/null || true
   (setsid env -u FOYER_DIR -u FOYER_RELANCE -u FOYER_RELAIS uwsm app -s b -- swaybg -m fill -i "$FOYER_CONFIG/foyer/fond.jpg" >/dev/null 2>&1 &) || true
+  # hypridle ne relit pas sa config tout seul.
+  pkill -x hypridle 2>/dev/null || true
+  (setsid env -u FOYER_DIR -u FOYER_RELANCE -u FOYER_RELAIS uwsm app -s b -t service -- hypridle >/dev/null 2>&1 &) || true
   info "Hub et fond d'écran (re)lancés"
 fi
 
