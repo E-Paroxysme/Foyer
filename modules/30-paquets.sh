@@ -60,3 +60,11 @@ for g in "${groupes[@]}"; do
     avertir "Groupe inconnu, ignoré : $g"
   fi
 done
+
+# Cache des paquets : on ne garde que la dernière version de chacun (les
+# instantanés Btrfs permettent déjà de revenir en arrière). Évite de remplir
+# les petits disques.
+if command -v paccache >/dev/null; then
+  sudo paccache -qrk1 || true
+  sudo paccache -qruk0 || true
+fi

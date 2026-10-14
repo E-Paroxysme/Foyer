@@ -18,6 +18,15 @@ erreur()  { printf '\033[1;31m  XX %s\033[0m\n' "$*" >&2; _ecrire "XX $*"; exit 
 verifier_prerequis() {
   [[ $EUID -eq 0 ]] && erreur "Lance Foyer avec ton utilisateur, pas en root."
   [[ -f /etc/arch-release ]] || erreur "Foyer est prévu pour Arch Linux."
+  # Foyer et ses logiciels prennent environ 10 Go ; en dessous de 6 Go libres,
+  # l'installation s'arrêterait en cours de route.
+  local libre
+  libre="$(df --output=avail -BG / 2>/dev/null | tail -1 | tr -dc '0-9')"
+  if [[ -n "$libre" && "$libre" -lt 6 ]]; then
+    erreur "Seulement ${libre} Go libres sur le disque : il en faut au moins 6 (10 conseillés). Libère de la place (sudo pacman -Scc) ou agrandis le disque."
+  elif [[ -n "$libre" && "$libre" -lt 12 ]]; then
+    avertir "Seulement ${libre} Go libres sur le disque : ça peut être juste (10 Go conseillés)."
+  fi
   info "Vérification de la connexion Internet…"
   if ! timeout 10 ping -c1 -W3 archlinux.org >/dev/null 2>&1; then
     if timeout 5 ping -c1 -W3 9.9.9.9 >/dev/null 2>&1; then
