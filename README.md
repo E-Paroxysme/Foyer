@@ -157,9 +157,12 @@ Icône du compte (écran de verrouillage) : une image carrée dans `~/.face`, pu
 
 Réglages : tape « réglages » (ou « wifi », « son », « thème », « batterie »…) dans
 la recherche du hub, ou `qs -c foyer ipc call hub reglages wifi`. Rubriques : compte
-(photo, nom, mot de passe, fond d'écran), Wi-Fi, Bluetooth, son, écran et énergie,
-souris et clavier, notifications, thème, accessibilité, confidentialité,
-applications par défaut, agendas, système. Ce qui est réglé ici est rangé dans
+(photo, nom, mot de passe, fond d'écran), Wi-Fi et mode avion, Bluetooth, son,
+écrans (luminosité, éclairage nocturne, taille, vidéoprojecteur en recopie ou
+extension, résolution, orientation), énergie (veille, capot, mode d'énergie,
+limite de charge), souris et clavier (dispositions, Alt+Maj pour changer),
+notifications, thème, accessibilité, confidentialité, applications (par défaut,
+au démarrage), agendas, système (mises à jour, instantanés Btrfs, infos). Ce qui est réglé ici est rangé dans
 `~/.config/foyer/reglages.json` et survit aux mises à jour.
 
 Agenda : clic sur la date du hub. Ajoute un événement en une phrase

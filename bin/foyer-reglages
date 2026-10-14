@@ -22,8 +22,12 @@ THEME_PERSO = FOYER / "theme.json"
 
 DEFAUTS = {
     "veille": {"ecran": 300, "verrou": 600, "suspension": 1200},
-    "entrees": {"sensibilite": 0.0, "defilementNaturel": True, "tapClic": True, "vitesseRepetition": 35},
+    "entrees": {"sensibilite": 0.0, "defilementNaturel": True, "tapClic": True, "vitesseRepetition": 35,
+                "dispositions": [{"code": "fr", "variante": ""}]},
     "ecran": {"echelle": 1.0},
+    "ecrans": {},
+    "nuit": {"mode": "non", "temperature": 4500, "debut": "21:00", "fin": "07:00"},
+    "avion": False,
     "compte": {"nom": ""},
 }
 
@@ -55,6 +59,9 @@ def lire():
     except (OSError, ValueError):
         r = {}
     for cle, val in DEFAUTS.items():
+        if not isinstance(val, dict):
+            r.setdefault(cle, val)
+            continue
         r.setdefault(cle, {})
         for k, v in val.items():
             r[cle].setdefault(k, v)
@@ -286,25 +293,31 @@ def cmd_energie(a):
 
 def ecrire_entrees(r):
     e, ec = r["entrees"], r["ecran"]
-    lua = f"""-- Géré par Foyer : produit par les Réglages du hub (ne pas modifier).
-hl.config({{
-	input = {{
-		sensitivity = {float(e['sensibilite']):.2f},
-		repeat_rate = {int(e['vitesseRepetition'])},
-		touchpad = {{
-			natural_scroll = {str(bool(e['defilementNaturel'])).lower()},
-			tap_to_click = {str(bool(e['tapClic'])).lower()},
-		}},
-	}},
-}})
-hl.monitor({{
-	output = "",
-	mode = "preferred",
-	position = "auto",
-	scale = "{float(ec['echelle']):g}",
-}})
-"""
-    return ecrire_fichier(HYPR / "reglages.lua", lua)
+    disp = e.get("dispositions") or [{"code": "fr", "variante": ""}]
+    lignes = ["-- Géré par Foyer : produit par les Réglages du hub (ne pas modifier).", "hl.config({", "\tinput = {",
+              f'\t\tkb_layout = "{",".join(d["code"] for d in disp)}",',
+              f'\t\tkb_variant = "{",".join(d.get("variante", "") for d in disp)}",',
+              # Plusieurs dispositions : Alt + Maj pour passer de l'une à l'autre.
+              f'\t\tkb_options = "{"grp:alt_shift_toggle" if len(disp) > 1 else ""}",',
+              f"\t\tsensitivity = {float(e['sensibilite']):.2f},",
+              f"\t\trepeat_rate = {int(e['vitesseRepetition'])},",
+              "\t\ttouchpad = {",
+              f"\t\t\tnatural_scroll = {str(bool(e['defilementNaturel'])).lower()},",
+              f"\t\t\ttap_to_click = {str(bool(e['tapClic'])).lower()},",
+              "\t\t},", "\t},", "})",
+              "-- Écrans : réglage général, puis un réglage par écran choisi dans le hub.",
+              "hl.monitor({", '\toutput = "",', '\tmode = "preferred",', '\tposition = "auto",', f'\tscale = "{float(ec["echelle"]):g}",', "})"]
+    for nom, m in sorted(r.get("ecrans", {}).items()):
+        lignes += ["hl.monitor({", f'\toutput = "{nom}",']
+        if m.get("actif") is False:
+            lignes += ["\tdisabled = true,", "})"]
+            continue
+        lignes += [f'\tmode = "{m.get("mode") or "preferred"}",', f'\tposition = "{m.get("position") or "auto"}",',
+                   f'\tscale = "{float(m.get("echelle") or ec["echelle"]):g}",', f'\ttransform = {int(m.get("rotation", 0))},']
+        if m.get("recopie"):
+            lignes.append(f'\tmirror = "{m["recopie"]}",')
+        lignes.append("})")
+    return ecrire_fichier(HYPR / "reglages.lua", "\n".join(lignes) + "\n")
 
 
 def cmd_entrees(a):
@@ -319,6 +332,14 @@ def cmd_entrees(a):
             r["entrees"][cle] = int(val)
         elif cle == "echelle":
             r["ecran"]["echelle"] = float(val)
+        elif cle == "dispositions":
+            # fr,us(intl) → [{code: fr}, {code: us, variante: intl}]
+            liste = []
+            for d in filter(None, val.split(",")):
+                m = re.match(r"([a-z]+)(?:\(([\w-]+)\))?$", d.strip())
+                if m:
+                    liste.append({"code": m.group(1), "variante": m.group(2) or ""})
+            r["entrees"]["dispositions"] = liste or [{"code": "fr", "variante": ""}]
     ecrire(r)
     if ecrire_entrees(r) and not a.sans_relance:
         lancer(["hyprctl", "reload"])
@@ -445,11 +466,199 @@ def cmd_heure(a):
     sys.exit(lancer(["timedatectl", "set-ntp", "true" if a.args[0] in ("1", "true") else "false"]))
 
 
+# --- Mode avion ------------------------------------------------------------------------
+def cmd_avion(a):
+    r = lire()
+    oui = a.args[0] in ("1", "on", "true")
+    r["avion"] = oui
+    ecrire(r)
+    lancer(["nmcli", "radio", "all", "off" if oui else "on"])
+    lancer(["bluetoothctl", "power", "off" if oui else "on"])
+
+
+# --- Écrans ------------------------------------------------------------------------------
+def cmd_ecrans(_a):
+    try:
+        brut = json.loads(sortie(["hyprctl", "monitors", "all", "-j"]) or "[]")
+    except ValueError:
+        brut = []
+    r = lire()
+    res = []
+    for m in brut:
+        modes = []
+        for md in m.get("availableModes", []):
+            mm = re.match(r"(\d+)x(\d+)@([\d.]+)Hz", md)
+            if mm:
+                cle = f"{mm.group(1)}x{mm.group(2)}@{round(float(mm.group(3)))}"
+                if cle not in modes:
+                    modes.append(cle)
+        res.append({
+            "nom": m.get("name", ""), "description": (m.get("make", "") + " " + m.get("model", "")).strip() or m.get("description", ""),
+            "actif": not m.get("disabled", False), "largeur": m.get("width", 0), "hauteur": m.get("height", 0),
+            "frequence": round(m.get("refreshRate", 0)), "echelle": m.get("scale", 1), "rotation": m.get("transform", 0),
+            "x": m.get("x", 0), "y": m.get("y", 0), "modes": modes[:12], "recopie": m.get("mirrorOf", "none") not in ("none", ""),
+            "interne": m.get("name", "").startswith(("eDP", "LVDS", "DSI")),
+            "reglage": r["ecrans"].get(m.get("name", ""), {}),
+        })
+    print(json.dumps(res, ensure_ascii=False))
+
+
+def cmd_ecran(a):
+    """foyer-reglages ecran HDMI-A-1 mode=1920x1080@60 echelle=1 rotation=0 position=auto-right recopie=eDP-1 actif=1"""
+    r = lire()
+    nom = a.args[0]
+    m = r["ecrans"].setdefault(nom, {})
+    for paire in a.args[1:]:
+        cle, _, val = paire.partition("=")
+        if cle == "actif":
+            m["actif"] = val in ("1", "true")
+        elif cle in ("echelle",):
+            m[cle] = float(val)
+        elif cle == "rotation":
+            m[cle] = int(val)
+        elif cle in ("mode", "position", "recopie"):
+            m[cle] = val
+        elif cle == "oublier":
+            r["ecrans"].pop(nom, None)
+    ecrire(r)
+    if ecrire_entrees(r) and not a.sans_relance:
+        lancer(["hyprctl", "reload"])
+
+
+# --- Éclairage nocturne (hyprsunset) -------------------------------------------------
+def ecrire_nuit(r):
+    n = r["nuit"]
+    t = int(n.get("temperature", 4500))
+    lignes = ["# Géré par Foyer : produit par les Réglages du hub (ne pas modifier)."]
+    if n.get("mode") == "toujours":
+        lignes += ["profile {", "    time = 00:00", f"    temperature = {t}", "}"]
+    elif n.get("mode") == "soir":
+        lignes += ["profile {", f"    time = {n.get('fin', '07:00')}", "    identity = true", "}",
+                   "profile {", f"    time = {n.get('debut', '21:00')}", f"    temperature = {t}", "}"]
+    else:
+        lignes += ["profile {", "    time = 00:00", "    identity = true", "}"]
+    return ecrire_fichier(HYPR / "hyprsunset.conf", "\n".join(lignes) + "\n")
+
+
+def cmd_nuit(a):
+    r = lire()
+    for paire in a.args:
+        cle, _, val = paire.partition("=")
+        if cle == "temperature":
+            r["nuit"][cle] = max(2500, min(6500, int(val)))
+        elif cle in ("mode", "debut", "fin"):
+            r["nuit"][cle] = val
+    ecrire(r)
+    ecrire_nuit(r)
+    if not a.sans_relance:
+        lancer(["pkill", "-x", "hyprsunset"])
+        fond(["uwsm", "app", "-s", "b", "--", "hyprsunset"])
+
+
+# --- Applications au démarrage (XDG autostart) ------------------------------------------
+def dossiers_applis():
+    data = os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share").split(":")
+    base = [Path(os.environ.get("XDG_DATA_HOME", HOME / ".local/share"))] + [Path(d) for d in data]
+    base += [HOME / ".local/share/flatpak/exports/share", Path("/var/lib/flatpak/exports/share")]
+    return [d / "applications" for d in base]
+
+
+def cmd_demarrage(a):
+    auto = CONFIG / "autostart"
+    if a.args and a.args[0] in ("ajouter", "retirer"):
+        ident = a.args[1].removesuffix(".desktop")
+        cible = auto / (ident + ".desktop")
+        if a.args[0] == "retirer":
+            cible.unlink(missing_ok=True)
+            return
+        for d in dossiers_applis():
+            src = d / (ident + ".desktop")
+            if src.exists():
+                auto.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(src, cible)
+                return
+        sys.exit("Application introuvable : " + ident)
+    res = []
+    if auto.is_dir():
+        for f in sorted(auto.glob("*.desktop")):
+            txt = f.read_text(errors="ignore")
+            nom = re.search(r"^Name(?:\[fr\])?=(.+)$", txt, re.M)
+            cache = re.search(r"^(Hidden|X-GNOME-Autostart-enabled)=(true|false)$", txt, re.M)
+            res.append({"id": f.stem, "nom": nom.group(1) if nom else f.stem,
+                        "actif": not (cache and ((cache.group(1) == "Hidden" and cache.group(2) == "true") or (cache.group(1) != "Hidden" and cache.group(2) == "false")))})
+    print(json.dumps(res, ensure_ascii=False))
+
+
+# --- Énergie : capot et limite de charge (demandent le mot de passe) ----------------------
+def batterie_seuil():
+    for b in sorted(Path("/sys/class/power_supply").glob("BAT*")):
+        f = b / "charge_control_end_threshold"
+        if f.exists():
+            return f
+    return None
+
+
+def cmd_energie_etat(_a):
+    capot = "veille"
+    try:
+        txt = Path("/etc/systemd/logind.conf.d/foyer-capot.conf").read_text()
+        m = re.search(r"HandleLidSwitch=(\w+)", txt)
+        capot = {"suspend": "veille", "lock": "verrou", "ignore": "rien"}.get(m.group(1), "veille") if m else "veille"
+    except OSError:
+        pass
+    seuil = batterie_seuil()
+    valeur = None
+    if seuil:
+        try:
+            valeur = int(seuil.read_text().strip())
+        except (OSError, ValueError):
+            pass
+    print(json.dumps({"capot": capot, "limiteDisponible": seuil is not None, "limite": valeur}))
+
+
+def cmd_capot(a):
+    action = {"veille": "suspend", "verrou": "lock", "rien": "ignore"}[a.args[0]]
+    contenu = f"# Géré par Foyer (Réglages du hub).\n[Login]\nHandleLidSwitch={action}\nHandleLidSwitchExternalPower={action}\n"
+    script = ("mkdir -p /etc/systemd/logind.conf.d && "
+              f"printf '%s' '{contenu}' > /etc/systemd/logind.conf.d/foyer-capot.conf && "
+              "systemctl kill -s HUP systemd-logind")
+    sys.exit(lancer(["pkexec", "sh", "-c", script], 120))
+
+
+def cmd_limite_charge(a):
+    seuil = batterie_seuil()
+    if not seuil:
+        sys.exit("Limite de charge non disponible sur cet ordinateur.")
+    v = int(a.args[0])
+    # Appliquée tout de suite, et à chaque démarrage par une règle udev.
+    regle = f'SUBSYSTEM=="power_supply", KERNEL=="{seuil.parent.name}", ATTR{{charge_control_end_threshold}}="{v}"'
+    script = (f"echo {v} > {seuil} && printf '%s\\n' '{regle}' > /etc/udev/rules.d/90-foyer-batterie.rules")
+    sys.exit(lancer(["pkexec", "sh", "-c", script], 120))
+
+
+# --- Instantanés Btrfs (snapper) ---------------------------------------------------------
+def cmd_instantanes(a):
+    if a.args and a.args[0] == "creer":
+        sys.exit(lancer(["snapper", "-c", "root", "create", "-d", "Foyer : instantané manuel"], 120))
+    if not shutil.which("snapper"):
+        print(json.dumps({"disponible": False, "liste": []}))
+        return
+    try:
+        d = json.loads(sortie(["snapper", "--jsonout", "-c", "root", "list"], 20) or "{}")
+    except ValueError:
+        d = {}
+    liste = [{"numero": x.get("number"), "date": x.get("date", ""), "description": x.get("description", ""),
+              "type": x.get("type", ""), "important": (x.get("userdata") or {}).get("important") == "yes"}
+             for x in d.get("root", []) if x.get("number")]
+    print(json.dumps({"disponible": "root" in d, "liste": liste[::-1][:20]}, ensure_ascii=False))
+
+
 # --- Appliquer tout (après une mise à jour) -------------------------------------------
 def cmd_appliquer(_a):
     r = lire()
     ecrire_veille(r)
     ecrire_entrees(r)
+    ecrire_nuit(r)
 
 
 def main():
@@ -464,7 +673,9 @@ def main():
         "bt": cmd_bt, "bt-action": cmd_bt_action, "luminosite": cmd_luminosite, "veille": cmd_veille,
         "energie": cmd_energie, "entrees": cmd_entrees, "nom": cmd_nom, "photo": cmd_photo, "fond": cmd_fond,
         "images": cmd_images, "theme": cmd_theme, "defaut": cmd_defaut, "confidentialite": cmd_confidentialite,
-        "heure": cmd_heure, "appliquer": cmd_appliquer,
+        "heure": cmd_heure, "appliquer": cmd_appliquer, "avion": cmd_avion, "ecrans": cmd_ecrans, "ecran": cmd_ecran,
+        "nuit": cmd_nuit, "demarrage": cmd_demarrage, "energie-etat": cmd_energie_etat, "capot": cmd_capot,
+        "limite-charge": cmd_limite_charge, "instantanes": cmd_instantanes,
     }
     if a.commande not in table:
         sys.exit("Commande inconnue : " + a.commande)

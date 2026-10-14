@@ -27,6 +27,10 @@ Item {
     property bool lumDispo: false
     property var images: []
     property var agendas: []
+    property var ecrans: []
+    property var energieEtat: ({ capot: "veille", limiteDisponible: false, limite: null })
+    property var demarrage: []
+    property var instantanes: ({ disponible: false, liste: [] })
     property string saisieWifi: ""        // réseau dont on tape le mot de passe
     property string message: ""
     property bool versLaDroite: true
@@ -37,8 +41,8 @@ Item {
 
     readonly property var titres: ({
         accueil: "Réglages", compte: "Compte", wifi: "Wi-Fi", bluetooth: "Bluetooth", son: "Son",
-        ecran: "Écran et énergie", entrees: "Souris et clavier", notifications: "Notifications", theme: "Thème",
-        accessibilite: "Accessibilité", confidentialite: "Confidentialité", defauts: "Applications par défaut",
+        ecrans: "Écrans", energie: "Énergie", entrees: "Souris et clavier", notifications: "Notifications", theme: "Thème",
+        accessibilite: "Accessibilité", confidentialite: "Confidentialité", applications: "Applications",
         agendas: "Agendas", systeme: "Système"
     })
     // Icônes au trait (24×24)
@@ -46,15 +50,16 @@ Item {
         wifi: "M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01",
         bluetooth: "M7 7l10 10-5 4V3l5 4L7 17",
         son: "M4 9h4l5-4v14l-5-4H4zM16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12",
-        ecran: "M12 8a4 4 0 1 1 0 8a4 4 0 1 1 0-8zM12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4",
+        ecrans: "M3 5h18v11H3zM8 20h8M12 16v4",
+        energie: "M3 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM22 10.5v3M10 9l-2 3h4l-2 3",
         entrees: "M12 3a6 6 0 0 1 6 6v6a6 6 0 0 1-12 0V9a6 6 0 0 1 6-6zM12 7v3",
         notifications: "M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4",
         theme: "M12 3a9 9 0 1 0 0 18c1 0 1.5-.8 1.5-1.6 0-1.2-1-1.4-1-2.4 0-.9.7-1.5 1.6-1.5H16a5 5 0 0 0 5-5c0-4-4-7.5-9-7.5zM7.5 11h.01M10 7.5h.01M15 7.5h.01",
         accessibilite: "M12 4a1.5 1.5 0 1 1 0 3a1.5 1.5 0 1 1 0-3zM5 9l7 1.5L19 9M12 10.5V15M12 15l-3 6M12 15l3 6",
         confidentialite: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4",
-        defauts: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
+        applications: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
         agendas: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
-        systeme: "M4 5h16v11H4zM9 20h6M12 16v4"
+        systeme: "M12 15a3 3 0 1 0 0-6a3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"
     })
 
     implicitHeight: hauteurMax
@@ -78,7 +83,10 @@ Item {
         glisse.restart();
         if (p === "wifi") lireWifi();
         if (p === "bluetooth") lireBt(false);
-        if (p === "ecran") lireLum();
+        if (p === "ecrans") { lireLum(); lireEcrans(); }
+        if (p === "energie") lireEnergie();
+        if (p === "applications") lireDemarrage();
+        if (p === "systeme") lireInstantanes();
         if (p === "agendas") lireAgendas();
     }
     function retour() {
@@ -103,6 +111,10 @@ Item {
     }
     function lireLum() { pLum.running = false; pLum.running = true; }
     function lireImages() { pImages.running = false; pImages.running = true; }
+    function lireEcrans() { pEcrans.running = false; pEcrans.running = true; }
+    function lireEnergie() { pEnergie.running = false; pEnergie.running = true; }
+    function lireDemarrage() { pDemarrage.running = false; pDemarrage.running = true; }
+    function lireInstantanes() { pInstantanes.running = false; pInstantanes.running = true; }
     function lireAgendas() {
         const d = new Date();
         pAgendas.running = false;
@@ -126,6 +138,10 @@ Item {
         }
     }
     Process { id: pImages; command: [reglages.outil, "images"]; stdout: StdioCollector { onStreamFinished: reglages.images = reglages.json(text, []) } }
+    Process { id: pEcrans; command: [reglages.outil, "ecrans"]; stdout: StdioCollector { onStreamFinished: reglages.ecrans = reglages.json(text, []) } }
+    Process { id: pEnergie; command: [reglages.outil, "energie-etat"]; stdout: StdioCollector { onStreamFinished: reglages.energieEtat = reglages.json(text, reglages.energieEtat) } }
+    Process { id: pDemarrage; command: [reglages.outil, "demarrage"]; stdout: StdioCollector { onStreamFinished: reglages.demarrage = reglages.json(text, []) } }
+    Process { id: pInstantanes; command: [reglages.outil, "instantanes"]; stdout: StdioCollector { onStreamFinished: reglages.instantanes = reglages.json(text, reglages.instantanes) } }
     Process { id: pAgendas; stdout: StdioCollector { onStreamFinished: reglages.agendas = (reglages.json(text, {}).agendas || []) } }
     Timer {
         interval: 10000
@@ -200,6 +216,7 @@ Item {
     function etatRubrique(cle) {
         switch (cle) {
         case "wifi": {
+            if (r("avion", false)) return "Mode avion";
             const c = (wifi.reseaux || []).find(w => w.connecte);
             return wifi.actif ? (c ? c.nom : "Non connecté") : "Désactivé";
         }
@@ -211,13 +228,14 @@ Item {
             const s = Pipewire.defaultAudioSink;
             return s ? Math.round((s.audio ? s.audio.volume : 0) * 100) + " %" + (s.audio && s.audio.muted ? " · muet" : "") : "—";
         }
-        case "ecran": return batterie && batterie.isLaptopBattery ? "Batterie " + Math.round(batterie.percentage * 100) + " %" : "Luminosité, veille";
+        case "ecrans": return r("nuit.mode", "non") !== "non" ? "Éclairage nocturne" : (ecrans.length > 1 ? ecrans.length + " écrans" : "Luminosité, taille");
+        case "energie": return batterie && batterie.isLaptopBattery ? "Batterie " + Math.round(batterie.percentage * 100) + " %" : "Veille, capot";
         case "entrees": return "Pavé tactile, clavier";
         case "notifications": return pastille && pastille.nePasDeranger ? "Ne pas déranger" : "Activées";
         case "theme": return (etat.theme ? etat.theme.base : "braise").replace(/^./, c => c.toUpperCase());
         case "accessibilite": return Theme.animations ? "Texte, animations" : "Animations réduites";
         case "confidentialite": return "Fichiers récents, corbeille";
-        case "defauts": return nomAppli(etat.defauts ? etat.defauts.navigateur : "");
+        case "applications": return "Par défaut, démarrage";
         case "agendas": return "Agendas branchés";
         case "systeme": return "Foyer " + (etat.foyer ? etat.foyer.version : "");
         }
@@ -225,7 +243,7 @@ Item {
     }
 
     // Premier coup d'œil : état Wi-Fi et Bluetooth pour les tuiles
-    onActifChanged: if (actif) { lireWifi(); lireBt(false); }
+    onActifChanged: if (actif) { lireWifi(); lireBt(false); lireEcrans(); }
 
     // --- Mise en page -----------------------------------------------------------------
     PwObjectTracker {
@@ -322,9 +340,9 @@ Item {
                 id: chargeur
                 width: defile.width
                 sourceComponent: reglages.choixImage !== "" ? vueImages : ({
-                    accueil: vueAccueil, compte: vueCompte, wifi: vueWifi, bluetooth: vueBt, son: vueSon, ecran: vueEcran,
-                    entrees: vueEntrees, notifications: vueNotifications, theme: vueTheme, accessibilite: vueAccessibilite,
-                    confidentialite: vueConfidentialite, defauts: vueDefauts, agendas: vueAgendas, systeme: vueSysteme
+                    accueil: vueAccueil, compte: vueCompte, wifi: vueWifi, bluetooth: vueBt, son: vueSon, ecrans: vueEcrans,
+                    energie: vueEnergie, entrees: vueEntrees, notifications: vueNotifications, theme: vueTheme, accessibilite: vueAccessibilite,
+                    confidentialite: vueConfidentialite, applications: vueDefauts, agendas: vueAgendas, systeme: vueSysteme
                 })[reglages.page] || vueAccueil
                 onLoaded: defile.contentY = 0
             }
@@ -377,17 +395,17 @@ Item {
             }
             GridLayout {
                 Layout.fillWidth: true
-                columns: 4
+                columns: 5
                 rowSpacing: 10
                 columnSpacing: 10
                 Repeater {
-                    model: ["wifi", "bluetooth", "son", "ecran", "entrees", "notifications", "theme", "accessibilite", "confidentialite", "defauts", "agendas", "systeme"]
+                    model: ["wifi", "bluetooth", "son", "ecrans", "energie", "entrees", "notifications", "theme", "accessibilite", "confidentialite", "applications", "agendas", "systeme"]
                     delegate: Rectangle {
                         id: tuile
                         required property var modelData
                         Layout.fillWidth: true
                         Layout.preferredWidth: 1
-                        implicitHeight: 104
+                        implicitHeight: 98
                         radius: Theme.arrondiCarte
                         color: zoneTuile.containsMouse ? Theme.carteChoisie : Theme.carte
                         border.width: 1
@@ -407,7 +425,7 @@ Item {
                             Item { Layout.fillHeight: true }
                             Text {
                                 Layout.fillWidth: true
-                                text: tuile.modelData === "defauts" ? "Applis par défaut" : reglages.titres[tuile.modelData]
+                                text: reglages.titres[tuile.modelData]
                                 color: Theme.texte
                                 font.family: Theme.police
                                 font.pixelSize: 13
@@ -571,7 +589,16 @@ Item {
         id: vueWifi
         ColumnLayout {
             spacing: 8
-            Etiquette { texte: reglages.wifi.actif ? "Réseaux disponibles" : "Wi-Fi désactivé" }
+            Carte {
+                Layout.fillWidth: true
+                LigneInter {
+                    titre: "Mode avion"
+                    aide: "Coupe le Wi-Fi et le Bluetooth d'un coup"
+                    actif: reglages.r("avion", false)
+                    onBascule: v => reglages.basculerAvion(v)
+                }
+            }
+            Etiquette { texte: reglages.wifi.actif ? "Réseaux disponibles" : "Wi-Fi désactivé"; Layout.topMargin: 4 }
             Text {
                 visible: reglages.wifi.actif && (reglages.wifi.reseaux || []).length === 0
                 text: "Recherche des réseaux…"
@@ -708,7 +735,16 @@ Item {
         id: vueBt
         ColumnLayout {
             spacing: 8
-            Etiquette { texte: "Mes appareils" }
+            Carte {
+                Layout.fillWidth: true
+                LigneInter {
+                    titre: "Mode avion"
+                    aide: "Coupe le Wi-Fi et le Bluetooth d'un coup"
+                    actif: reglages.r("avion", false)
+                    onBascule: v => reglages.basculerAvion(v)
+                }
+            }
+            Etiquette { texte: "Mes appareils"; Layout.topMargin: 4 }
             Text {
                 visible: reglages.bt.actif && (reglages.bt.appareils || []).filter(a => a.appaire).length === 0
                 text: "Aucun appareil appairé."
@@ -749,6 +785,12 @@ Item {
                 }
             }
         }
+    }
+    function basculerAvion(v) {
+        const e = Object.assign({}, etat);
+        e.reglages = Object.assign({}, e.reglages || {}, { avion: v });
+        etat = e;
+        agir(["avion", v ? 1 : 0], () => { reglages.lireWifi(); reglages.lireBt(false); });
     }
     function actionBt(act, m) {
         message = "";
@@ -845,9 +887,9 @@ Item {
         }
     }
 
-    // ===================== Écran et énergie =====================
+    // ===================== Écrans =====================
     Component {
-        id: vueEcran
+        id: vueEcrans
         ColumnLayout {
             spacing: 12
             Carte {
@@ -874,12 +916,138 @@ Item {
             Carte {
                 Layout.fillWidth: true
                 LigneSegments {
+                    titre: "Éclairage nocturne"
+                    choix: [{ nom: "Non", valeur: "non" }, { nom: "Le soir", valeur: "soir" }, { nom: "Toujours", valeur: "toujours" }]
+                    valeur: reglages.r("nuit.mode", "non")
+                    onChoisi: v => reglages.changerNuit("mode", v)
+                }
+                Text {
+                    visible: reglages.r("nuit.mode", "non") === "soir"
+                    text: "De " + reglages.r("nuit.debut", "21:00") + " à " + reglages.r("nuit.fin", "07:00")
+                    color: Theme.discret; font.family: Theme.police; font.pixelSize: 12
+                }
+                ColumnLayout {
+                    visible: reglages.r("nuit.mode", "non") !== "non"
+                    Layout.fillWidth: true
+                    spacing: 6
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text { text: "Intensité"; color: Theme.texte; font.family: Theme.police; font.pixelSize: 13; Layout.fillWidth: true }
+                        Text { text: reglages.r("nuit.temperature", 4500) + " K"; color: Theme.discret; font.family: Theme.police; font.pixelSize: 12 }
+                    }
+                    // Curseur inversé : à droite = plus chaud (température plus basse)
+                    Curseur {
+                        Layout.fillWidth: true
+                        de: 0; a: 3500; pas: 100
+                        valeur: 6000 - reglages.r("nuit.temperature", 4500)
+                        onLache: v => reglages.changerNuit("temperature", 6000 - v)
+                    }
+                }
+            }
+            Carte {
+                Layout.fillWidth: true
+                LigneSegments {
                     titre: "Taille de l'affichage"
                     choix: [{ nom: "100 %", valeur: 1 }, { nom: "125 %", valeur: 1.25 }, { nom: "150 %", valeur: 1.5 }, { nom: "200 %", valeur: 2 }]
                     valeur: reglages.r("ecran.echelle", 1)
                     onChoisi: v => reglages.agir(["entrees", "echelle=" + v], () => reglages.lireEtat())
                 }
             }
+            Etiquette { texte: reglages.ecrans.length > 1 ? reglages.ecrans.length + " écrans branchés" : "Écran"; Layout.topMargin: 4 }
+            Repeater {
+                model: reglages.ecrans
+                delegate: Carte {
+                    id: carteEcran
+                    required property var modelData
+                    readonly property var reg: modelData.reglage || {}
+                    readonly property string principal: (reglages.ecrans.find(e => e.interne) || reglages.ecrans[0] || {}).nom || ""
+                    Layout.fillWidth: true
+                    RowLayout {
+                        Layout.fillWidth: true
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 1
+                            Text {
+                                text: (carteEcran.modelData.interne ? "Écran du portable" : (carteEcran.modelData.description || carteEcran.modelData.nom))
+                                color: Theme.texte; font.family: Theme.police; font.pixelSize: 14; font.weight: Font.Medium
+                            }
+                            Text {
+                                text: carteEcran.modelData.nom + " · " + carteEcran.modelData.largeur + "×" + carteEcran.modelData.hauteur + " · " + carteEcran.modelData.frequence + " Hz"
+                                color: Theme.discret; font.family: Theme.police; font.pixelSize: 12
+                            }
+                        }
+                        Interrupteur {
+                            visible: reglages.ecrans.length > 1
+                            actif: carteEcran.modelData.actif
+                            onBascule: v => reglages.changerEcran(carteEcran.modelData.nom, ["actif=" + (v ? 1 : 0)])
+                        }
+                    }
+                    LigneSegments {
+                        visible: !carteEcran.modelData.interne && reglages.ecrans.length > 1
+                        titre: "Place"
+                        choix: [{ nom: "À gauche", valeur: "auto-left" }, { nom: "À droite", valeur: "auto-right" }, { nom: "Au-dessus", valeur: "auto-up" }, { nom: "Recopie", valeur: "recopie" }]
+                        valeur: carteEcran.reg.recopie ? "recopie" : (carteEcran.reg.position || "auto-right")
+                        onChoisi: v => reglages.changerEcran(carteEcran.modelData.nom, v === "recopie" ? ["recopie=" + carteEcran.principal] : ["recopie=", "position=" + v])
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: carteEcran.modelData.modes.length > 1
+                        Text { text: "Résolution"; color: Theme.texte; font.family: Theme.police; font.pixelSize: 14; Layout.fillWidth: true }
+                        Bouton {
+                            glyphe: "‹"
+                            rond: true
+                            onClic: reglages.cyclerMode(carteEcran.modelData, 1)
+                        }
+                        Text {
+                            text: (carteEcran.reg.mode || (carteEcran.modelData.largeur + "x" + carteEcran.modelData.hauteur + "@" + carteEcran.modelData.frequence)).replace("x", "×").replace("@", " · ") + " Hz"
+                            color: Theme.texte; font.family: Theme.police; font.pixelSize: 13
+                        }
+                        Bouton {
+                            glyphe: "›"
+                            rond: true
+                            onClic: reglages.cyclerMode(carteEcran.modelData, -1)
+                        }
+                    }
+                    LigneSegments {
+                        titre: "Orientation"
+                        choix: [{ nom: "Normale", valeur: 0 }, { nom: "90°", valeur: 1 }, { nom: "180°", valeur: 2 }, { nom: "270°", valeur: 3 }]
+                        valeur: carteEcran.reg.rotation !== undefined ? carteEcran.reg.rotation : carteEcran.modelData.rotation
+                        onChoisi: v => reglages.changerEcran(carteEcran.modelData.nom, ["rotation=" + v])
+                    }
+                }
+            }
+            Text {
+                visible: reglages.ecrans.length <= 1
+                Layout.fillWidth: true
+                text: "Branche un vidéoprojecteur ou un second écran : il apparaîtra ici (recopie ou extension)."
+                color: Theme.discret; font.family: Theme.police; font.pixelSize: 12
+                wrapMode: Text.Wrap
+            }
+        }
+    }
+    function changerNuit(cle, v) {
+        const n = Object.assign({ mode: "non", temperature: 4500, debut: "21:00", fin: "07:00" }, r("nuit", {}));
+        n[cle] = v;
+        const e = Object.assign({}, etat);
+        e.reglages = Object.assign({}, e.reglages || {}, { nuit: n });
+        etat = e;
+        agir(["nuit", cle + "=" + v]);
+    }
+    function changerEcran(nom, args) {
+        agir(["ecran", nom].concat(args), () => { reglages.lireEcrans(); });
+    }
+    function cyclerMode(m, sens) {
+        const actuel = (m.reglage && m.reglage.mode) || (m.largeur + "x" + m.hauteur + "@" + m.frequence);
+        let i = m.modes.indexOf(actuel);
+        i = (i < 0 ? 0 : i + sens + m.modes.length) % m.modes.length;
+        changerEcran(m.nom, ["mode=" + m.modes[i]]);
+    }
+
+    // ===================== Énergie =====================
+    Component {
+        id: vueEnergie
+        ColumnLayout {
+            spacing: 12
             Carte {
                 Layout.fillWidth: true
                 LigneSegments {
@@ -903,12 +1071,25 @@ Item {
             }
             Carte {
                 Layout.fillWidth: true
-                visible: (reglages.etat.energie || "") !== ""
                 LigneSegments {
+                    titre: "Quand on ferme le capot"
+                    choix: [{ nom: "Veille", valeur: "veille" }, { nom: "Verrouiller", valeur: "verrou" }, { nom: "Rien", valeur: "rien" }]
+                    valeur: reglages.energieEtat.capot
+                    onChoisi: v => reglages.agir(["capot", v], () => reglages.lireEnergie(), "Réglage du capot non appliqué (mot de passe refusé ?).")
+                }
+                LigneSegments {
+                    visible: (reglages.etat.energie || "") !== ""
                     titre: "Mode d'énergie"
                     choix: [{ nom: "Économie", valeur: "power-saver" }, { nom: "Équilibré", valeur: "balanced" }, { nom: "Performance", valeur: "performance" }]
                     valeur: reglages.etat.energie || ""
                     onChoisi: v => reglages.agir(["energie", v], () => reglages.lireEtat(), "Ce mode n'est pas disponible sur cet ordinateur.")
+                }
+                LigneInter {
+                    visible: reglages.energieEtat.limiteDisponible
+                    titre: "Préserver la batterie"
+                    aide: "Arrête la charge à 80 % (le mot de passe est demandé)"
+                    actif: reglages.energieEtat.limite !== null && reglages.energieEtat.limite < 100
+                    onBascule: v => reglages.agir(["limite-charge", v ? 80 : 100], () => reglages.lireEnergie(), "Limite de charge non appliquée.")
                 }
             }
             Carte {
@@ -990,10 +1171,57 @@ Item {
                     valeur: reglages.r("entrees.vitesseRepetition", 35)
                     onChoisi: v => reglages.changerEntree("vitesseRepetition", v)
                 }
-                Ligne { titre: "Disposition du clavier"; valeur: "Français (AZERTY)" }
+                ColumnLayout {
+                    id: colClavier
+                    Layout.fillWidth: true
+                    spacing: 8
+                    property bool ajout: false
+                    readonly property var noms: ({ "fr": "Français (AZERTY)", "fr(bepo)": "Français (BÉPO)", "fr(oss)": "Français (variante)", "us": "Anglais (QWERTY)", "us(intl)": "Anglais international", "gb": "Anglais (Royaume-Uni)", "de": "Allemand", "es": "Espagnol", "it": "Italien", "ch(fr)": "Suisse romand", "be": "Belge", "ca(fr)": "Canadien français", "ar": "Arabe", "ru": "Russe" })
+                    readonly property var actives: (reglages.r("entrees.dispositions", [{ code: "fr", variante: "" }])).map(d => d.code + (d.variante ? "(" + d.variante + ")" : ""))
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text { text: "Dispositions du clavier"; color: Theme.texte; font.family: Theme.police; font.pixelSize: 14; Layout.fillWidth: true }
+                        Text { visible: colClavier.actives.length > 1; text: "Alt + Maj pour changer"; color: Theme.discret; font.family: Theme.police; font.pixelSize: 12 }
+                    }
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        Repeater {
+                            model: colClavier.actives
+                            delegate: Bouton {
+                                required property var modelData
+                                required property int index
+                                texte: (colClavier.noms[modelData] || modelData) + (colClavier.actives.length > 1 ? "  ×" : "")
+                                onClic: if (colClavier.actives.length > 1) reglages.changerClavier(colClavier.actives.filter((x, i) => i !== index))
+                            }
+                        }
+                        Bouton { texte: "+ Ajouter"; onClic: colClavier.ajout = !colClavier.ajout }
+                    }
+                    Flow {
+                        visible: colClavier.ajout
+                        Layout.fillWidth: true
+                        spacing: 6
+                        Repeater {
+                            model: Object.keys(colClavier.noms).filter(k => !colClavier.actives.includes(k))
+                            delegate: Bouton {
+                                required property var modelData
+                                texte: colClavier.noms[modelData]
+                                onClic: { colClavier.ajout = false; reglages.changerClavier(colClavier.actives.concat([modelData])); }
+                            }
+                        }
+                    }
+                }
                 Ligne { titre: "Raccourcis"; valeur: "Super : hub · Super+Entrée : terminal · Super+Q : fermer" }
             }
         }
+    }
+    function changerClavier(liste) {
+        const en = Object.assign({}, r("entrees", {}));
+        en.dispositions = liste.map(x => { const m = x.match(/^([a-z]+)(?:\(([\w-]+)\))?$/); return { code: m[1], variante: m[2] || "" }; });
+        const e = Object.assign({}, etat);
+        e.reglages = Object.assign({}, e.reglages || {}, { entrees: en });
+        etat = e;
+        agir(["entrees", "dispositions=" + liste.join(",")]);
     }
     function changerEntree(cle, v) {
         const en = Object.assign({}, r("entrees", {}));
@@ -1256,6 +1484,7 @@ Item {
                 { cle: "musique", nom: "Musique", cat: ["Audio", "Music"] },
                 { cle: "video", nom: "Vidéos", cat: ["Video"] }
             ]
+            Etiquette { texte: "Par défaut" }
             Repeater {
                 model: colDefauts.genres
                 delegate: Rectangle {
@@ -1301,6 +1530,53 @@ Item {
                             visible: genre.candidats.length === 0
                             text: "Aucune application installée pour ça."
                             color: Theme.discret; font.family: Theme.police; font.pixelSize: 12
+                        }
+                    }
+                }
+            }
+
+            Etiquette { texte: "Au démarrage de la session"; Layout.topMargin: 10 }
+            Text {
+                visible: reglages.demarrage.length === 0
+                text: "Aucune application ne s'ouvre toute seule."
+                color: Theme.discret; font.family: Theme.police; font.pixelSize: 13
+            }
+            Repeater {
+                model: reglages.demarrage
+                delegate: Rectangle {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    implicitHeight: 44
+                    radius: 14
+                    color: Qt.rgba(1, 1, 1, 0.045)
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 14
+                        anchors.rightMargin: 8
+                        Text { text: parent.parent.modelData.nom; color: Theme.texte; font.family: Theme.police; font.pixelSize: 14; Layout.fillWidth: true }
+                        Bouton {
+                            texte: "Retirer"
+                            onClic: reglages.agir(["demarrage", "retirer", parent.parent.modelData.id], () => reglages.lireDemarrage())
+                        }
+                    }
+                }
+            }
+            ColumnLayout {
+                id: ajoutDemarrage
+                Layout.fillWidth: true
+                spacing: 6
+                property bool ouvert: false
+                Bouton { texte: ajoutDemarrage.ouvert ? "Fermer la liste" : "+ Ouvrir une application au démarrage"; onClic: ajoutDemarrage.ouvert = !ajoutDemarrage.ouvert }
+                Flow {
+                    visible: ajoutDemarrage.ouvert
+                    Layout.fillWidth: true
+                    spacing: 6
+                    Repeater {
+                        model: ajoutDemarrage.ouvert ? DesktopEntries.applications.values.filter(e => !e.noDisplay && !reglages.demarrage.some(d => d.id === e.id)).sort((x, y) => x.name.localeCompare(y.name)) : []
+                        delegate: Bouton {
+                            required property var modelData
+                            texte: modelData.name
+                            onClic: { ajoutDemarrage.ouvert = false; reglages.agir(["demarrage", "ajouter", modelData.id], () => reglages.lireDemarrage(), "Impossible d'ajouter cette application."); }
                         }
                     }
                 }
@@ -1439,6 +1715,49 @@ Item {
                             Text { width: parent.width; text: parent.parent.modelData[1]; color: Theme.texte; font.family: Theme.police; font.pixelSize: 14; elide: Text.ElideRight }
                         }
                     }
+                }
+            }
+            Etiquette { texte: "Instantanés Btrfs"; Layout.topMargin: 6 }
+            Carte {
+                Layout.fillWidth: true
+                Text {
+                    visible: !reglages.instantanes.disponible
+                    Layout.fillWidth: true
+                    text: "Instantanés non disponibles (système de fichiers autre que Btrfs, ou accès pas encore donné : lance foyer update)."
+                    color: Theme.discret; font.family: Theme.police; font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                }
+                Text {
+                    visible: reglages.instantanes.disponible
+                    Layout.fillWidth: true
+                    text: "Un état du système est gardé avant et après chaque installation. Pour revenir en arrière, redémarre et choisis l'instantané dans le menu de démarrage ; pour récupérer un fichier, parcours-le."
+                    color: Theme.discret; font.family: Theme.police; font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                }
+                Repeater {
+                    model: reglages.instantanes.liste.slice(0, 8)
+                    delegate: RowLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: 10
+                        Text { text: "n° " + modelData.numero; color: Theme.discret; font.family: Theme.police; font.pixelSize: 12; Layout.preferredWidth: 44 }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 0
+                            Text { Layout.fillWidth: true; text: modelData.description || "Instantané"; color: Theme.texte; font.family: Theme.police; font.pixelSize: 13; elide: Text.ElideRight }
+                            Text { text: modelData.date; color: Theme.discret; font.family: Theme.police; font.pixelSize: 11 }
+                        }
+                        Bouton {
+                            texte: "Parcourir"
+                            onClic: { Quickshell.execDetached(["xdg-open", "/.snapshots/" + parent.modelData.numero + "/snapshot"]); reglages.fermer(); }
+                        }
+                    }
+                }
+                RowLayout {
+                    visible: reglages.instantanes.disponible
+                    Layout.fillWidth: true
+                    Item { Layout.fillWidth: true }
+                    Bouton { texte: "Créer un instantané maintenant"; onClic: reglages.agir(["instantanes", "creer"], () => reglages.lireInstantanes(), "Instantané non créé.") }
                 }
             }
             Lien {

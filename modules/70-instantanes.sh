@@ -29,6 +29,9 @@ fi
 
 info "Limite : 5 instantanés de mises à jour conservés"
 sudo snapper -c root set-config NUMBER_LIMIT=5 NUMBER_LIMIT_IMPORTANT=5 TIMELINE_CREATE=no
+# Les Réglages du hub listent les instantanés, en créent, et permettent de
+# parcourir leurs fichiers : accès donné à l'utilisateur.
+sudo snapper -c root set-config ALLOW_USERS="${USER:-$(id -un)}" SYNC_ACL=yes || avertir "Accès utilisateur aux instantanés non réglé."
 
 if pacman -Q grub >/dev/null 2>&1; then
   info "GRUB détecté : instantanés proposés au démarrage (grub-btrfs)"

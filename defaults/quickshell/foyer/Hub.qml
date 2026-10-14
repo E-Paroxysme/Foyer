@@ -198,15 +198,17 @@ PanelWindow {
             ["wifi", "Wi-Fi", "wifi wi-fi reseau internet connexion sans fil"],
             ["bluetooth", "Bluetooth", "bluetooth casque ecouteurs souris sans fil appairer"],
             ["son", "Son", "son volume audio haut-parleurs micro micros sortie casque"],
-            ["ecran", "Écran et énergie", "ecran luminosite veille energie batterie verrouillage affichage echelle"],
-            ["entrees", "Souris et clavier", "souris clavier pave tactile touchpad pointeur defilement"],
+            ["ecrans", "Écrans", "ecran ecrans luminosite affichage echelle videoprojecteur projecteur recopie resolution nocturne nuit lumiere bleue orientation"],
+            ["energie", "Énergie", "energie batterie veille verrouillage capot charge economie"],
+            ["wifi", "Mode avion", "avion mode avion"],
+            ["entrees", "Souris et clavier", "souris clavier pave tactile touchpad pointeur defilement disposition azerty qwerty bepo"],
             ["notifications", "Notifications", "notifications ne pas deranger alertes"],
             ["theme", "Thème", "theme couleur couleurs accent transparence arrondi apparence"],
             ["accessibilite", "Accessibilité", "accessibilite taille texte police grand animations contraste"],
             ["confidentialite", "Confidentialité", "confidentialite vie privee fichiers recents corbeille presse-papier"],
-            ["defauts", "Applications par défaut", "applications par defaut navigateur courriel pdf ouvrir avec"],
+            ["applications", "Applications", "applications par defaut navigateur courriel pdf ouvrir avec demarrage automatique"],
             ["agendas", "Agendas", "agenda agendas calendrier pronote caldav ical"],
-            ["systeme", "Système", "systeme mise a jour version disque stockage a propos imprimante heure date"],
+            ["systeme", "Système", "systeme mise a jour version disque stockage a propos imprimante heure date instantane instantanes btrfs sauvegarde snapper restaurer"],
             ["compte", "Compte", "compte photo nom mot de passe utilisateur fond d'ecran avatar"]
         ];
         let nbReglages = 0;
