@@ -34,7 +34,7 @@ lister_modules() {
 nom_module() { basename "$1" .sh | cut -d- -f2-; }
 
 # Poids de chaque module dans la progression globale (le volume réel de travail).
-declare -A POIDS=([depots]=10 [pilotes]=5 [paquets]=60 [vie-privee]=4 [theme]=3 [bureau]=4 [services]=2 [instantanes]=15)
+declare -A POIDS=([depots]=10 [pilotes]=5 [paquets]=60 [vie-privee]=4 [theme]=3 [bureau]=4 [barres]=8 [services]=2 [instantanes]=15)
 FAIT=0 TOTAL=0 RANG=0 NB=0
 
 preparer_progression() {

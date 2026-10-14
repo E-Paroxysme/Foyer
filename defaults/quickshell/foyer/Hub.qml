@@ -233,14 +233,17 @@ PanelWindow {
     function listerFenetres() {
         const hypr = Hyprland.toplevels ? Hyprland.toplevels.values : [];
         const liste = ToplevelManager.toplevels.values.map((t, i) => {
-            let bureau = 0;
+            let bureau = 0, reduite = false, adresse = "";
             for (const h of hypr) {
                 if (h.wayland === t) {
                     bureau = h.workspace ? h.workspace.id : 0;
+                    // Bouton « réduire » des barres de titre : la fenêtre part sur ce bureau caché.
+                    reduite = !!h.workspace && h.workspace.name === "special:reduites";
+                    adresse = h.address ? (String(h.address).startsWith("0x") ? String(h.address) : "0x" + h.address) : "";
                     break;
                 }
             }
-            return { fenetre: t, bureau: bureau, ordre: i };
+            return { fenetre: t, bureau: bureau, ordre: i, reduite: reduite, adresse: adresse };
         });
         const rang = b => (b > 0 ? b : 1000 - b);
         liste.sort((a, b) => rang(a.bureau) - rang(b.bureau) || a.ordre - b.ordre);
@@ -260,7 +263,18 @@ PanelWindow {
             const actuel = Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id === b;
             return "Bureau " + b + (actuel ? " · actuel" : "");
         }
-        return b < 0 ? "Bureau spécial" : "Fenêtres ouvertes";
+        return b < 0 ? (hub.fenetres.some(f => f.bureau === b && f.reduite) ? "Fenêtres réduites" : "Bureau spécial") : "Fenêtres ouvertes";
+    }
+
+    // Affiche une fenêtre ; si elle est réduite, la ramène d'abord sur le bureau actuel.
+    function montrerFenetre(t) {
+        const e = hub.fenetres.find(f => f.fenetre === t);
+        if (e && e.reduite && e.adresse && Hyprland.focusedWorkspace) {
+            const fen = "address:" + e.adresse;
+            executer(["sh", "-c", "hyprctl dispatch \"hl.dsp.window.move({ workspace = " + Hyprland.focusedWorkspace.id + ", window = '" + fen + "', follow = false })\" && hyprctl dispatch \"hl.dsp.focus({ window = '" + fen + "' })\""]);
+        } else {
+            t.activate();
+        }
     }
 
     function lecteurActif() {
@@ -322,7 +336,7 @@ PanelWindow {
             lancerTuile(r.donnee);
             break;
         case "fenetre":
-            r.donnee.activate();
+            montrerFenetre(r.donnee);
             break;
         case "fichier":
         case "web":
@@ -388,7 +402,7 @@ PanelWindow {
         } else if (curseur >= nbTuiles) {
             const f = fenetresVisibles[curseur - nbTuiles];
             if (f) {
-                f.fenetre.activate();
+                montrerFenetre(f.fenetre);
                 ouvert = false;
             }
         }
@@ -1081,7 +1095,7 @@ PanelWindow {
                                     anchors.rightMargin: 44
                                     hoverEnabled: true
                                     onClicked: {
-                                        ligne.fenetre.activate();
+                                        hub.montrerFenetre(ligne.fenetre);
                                         hub.ouvert = false;
                                     }
                                 }

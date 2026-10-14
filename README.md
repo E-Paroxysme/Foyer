@@ -155,6 +155,13 @@ applications restent les officielles.
 Icône du compte (écran de verrouillage) : une image carrée dans `~/.face`, puis
 `foyer theme`. Sans elle, un rond aux couleurs du thème.
 
+Barres de titre : toutes les fenêtres reçoivent réduire / agrandir / fermer grâce à
+l'extension officielle hyprbars, compilée par `hyprpm` (module `barres`, à lancer
+depuis la session : `foyer update barres`). Une fenêtre réduite se retrouve dans
+le hub (« Fenêtres réduites ») ; un clic la ramène. Après une mise à jour
+d'Hyprland, `foyer update` recompile l'extension ; tant que ce n'est pas fait,
+Hyprland démarre normalement, sans barres. Journal : `~/.local/state/foyer/hyprpm.log`.
+
 Fond d'écran : remplace `~/.config/foyer/fond.jpg` par l'image de ton choix.
 
 Tes réglages personnels vont dans `~/.config/foyer/perso.lua` : ce fichier n'est
