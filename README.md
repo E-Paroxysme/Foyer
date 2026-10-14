@@ -148,6 +148,10 @@ Thème : `foyer theme <nom>` choisit un thème tout prêt. Pour l'ajuster,
 { "couleurs": { "accent": "#5aa0e8" } }
 ```
 
+Le thème colore aussi les dossiers de l'explorateur de fichiers (icônes Papirus,
+clé `icones.dossiers` : orange, blue, green, pink, bluegrey…) ; les icônes des
+applications restent les officielles.
+
 Icône du compte (écran de verrouillage) : une image carrée dans `~/.face`, puis
 `foyer theme`. Sans elle, un rond aux couleurs du thème.
 

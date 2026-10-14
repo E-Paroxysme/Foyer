@@ -49,5 +49,8 @@
   "gtk": {
     "description": "Couleur d'accent des applications GNOME (Fichiers…) : blue, teal, green, yellow, orange, red, pink, purple ou slate.",
     "accent": "orange"
+  },
+  "icones": {
+    "dossiers": "deeporange"
   }
 }

@@ -2,5 +2,8 @@
   "description": "Braise (par défaut) : orange chaud sur brun sombre.",
   "gtk": {
     "accent": "orange"
+  },
+  "icones": {
+    "dossiers": "deeporange"
   }
 }

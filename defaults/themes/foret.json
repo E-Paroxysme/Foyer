@@ -9,5 +9,8 @@
   },
   "gtk": {
     "accent": "green"
+  },
+  "icones": {
+    "dossiers": "green"
   }
 }

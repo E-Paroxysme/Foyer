@@ -78,7 +78,7 @@ PanelWindow {
     function montrerNotif(n) {
         notifCourante = n;
         mode = "notif";
-        minuteur.interval = 8000;
+        minuteur.interval = 5000;
         minuteur.restart();
     }
 

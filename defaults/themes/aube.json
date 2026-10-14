@@ -9,5 +9,8 @@
   },
   "gtk": {
     "accent": "pink"
+  },
+  "icones": {
+    "dossiers": "pink"
   }
 }

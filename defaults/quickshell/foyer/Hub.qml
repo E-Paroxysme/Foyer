@@ -434,6 +434,9 @@ PanelWindow {
     readonly property date moisAffiche: new Date(dateRef.getFullYear(), dateRef.getMonth() + moisDecalage, 1)
     readonly property int jourAffiche: jourChoisi > 0 ? jourChoisi : (moisDecalage === 0 ? dateRef.getDate() : 1)
 
+    // Hauteur du hub au moment d'ouvrir le calendrier : le calendrier tient dedans
+    // (il se réduit au besoin) au lieu d'agrandir le hub jusqu'au bord de l'écran.
+    readonly property real hauteurAccueil: Math.max(420, vueAccueil.implicitHeight)
     function ouvrirCalendrier() {
         dateRef = new Date();
         moisDecalage = 0;
@@ -471,7 +474,7 @@ PanelWindow {
     Rectangle {
         id: panneau
         width: Math.min(720, hub.width - 48)
-        height: (hub.vue === "calendrier" ? vueCalendrier.implicitHeight : vueAccueil.implicitHeight) + 52
+        height: (hub.vue === "calendrier" ? hub.hauteurAccueil : vueAccueil.implicitHeight) + 52
         anchors.horizontalCenter: parent.horizontalCenter
         y: Math.max(24, Math.min(48, hub.height * 0.05))
         radius: Theme.arrondiPanneau
@@ -1129,9 +1132,13 @@ PanelWindow {
         // ===================== Vue calendrier =====================
         ColumnLayout {
             id: vueCalendrier
+            // Échelle pour tenir dans la hauteur du hub (jamais agrandi au-delà de 1).
+            readonly property real echelle: implicitHeight > 0 ? Math.min(1, hub.hauteurAccueil / implicitHeight) : 1
             x: 40
-            y: 30
-            width: parent.width - 80
+            y: 26
+            width: (parent.width - 80) / echelle
+            scale: echelle
+            transformOrigin: Item.TopLeft
             spacing: 20
             opacity: hub.vue === "calendrier" ? 1 : 0
             visible: opacity > 0
@@ -1221,6 +1228,7 @@ PanelWindow {
                     delegate: Text {
                         required property var modelData
                         Layout.fillWidth: true
+                        Layout.preferredWidth: 1   // colonnes de largeur égale
                         horizontalAlignment: Text.AlignHCenter
                         text: modelData
                         color: Theme.discret
@@ -1236,6 +1244,7 @@ PanelWindow {
                         required property var modelData
                         required property int index
                         Layout.fillWidth: true
+                        Layout.preferredWidth: 1
                         Layout.preferredHeight: 50
                         Rectangle {
                             id: rond
