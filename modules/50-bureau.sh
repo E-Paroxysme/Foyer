@@ -33,6 +33,11 @@ EOF2
 else
   printf -- '-- Géré par Foyer (profil graphique « normal »)\n' >"$materiel"
 fi
+# Machine virtuelle (VMware, QEMU, VirtualBox…) : le curseur matériel s'y affiche mal.
+if command -v systemd-detect-virt >/dev/null && systemd-detect-virt -q --vm; then
+  info "Machine virtuelle détectée ($(systemd-detect-virt --vm)) : curseur logiciel"
+  printf -- '-- Machine virtuelle : curseur dessiné par Hyprland\nhl.config({ cursor = { no_hardware_cursors = true } })\n' >>"$materiel"
+fi
 deposer "$materiel" "$FOYER_CONFIG/hypr/materiel.lua"
 # Réglages faits dans le hub (veille, souris, écran) : réécrits par-dessus les fichiers par défaut.
 "$FOYER_DIR/bin/foyer-reglages" appliquer || avertir "Réglages du hub non appliqués."
