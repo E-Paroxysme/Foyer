@@ -42,14 +42,19 @@ ShellRoot {
         creer("Hub.qml", objet => {
             if (objet) {
                 racine.hub = objet;
+                if (racine.pastille)
+                    objet.pastille = racine.pastille;
             } else {
                 creer("HubSecours.qml", secours => racine.hub = secours);
                 Quickshell.execDetached(["notify-send", "Foyer", "Le hub principal n'a pas pu démarrer : version de secours. Détails : qs -c foyer"]);
             }
         });
         creer("Pastille.qml", objet => {
-            if (objet)
+            if (objet) {
                 racine.pastille = objet;
+                if (racine.hub && "pastille" in racine.hub)
+                    racine.hub.pastille = objet;
+            }
             else
                 Quickshell.execDetached(["uwsm", "app", "-s", "b", "--", "mako"]);
         });
@@ -71,6 +76,20 @@ ShellRoot {
         function fermer(): void {
             if (racine.hub)
                 racine.hub.ouvert = false;
+        }
+        // qs -c foyer ipc call hub reglages wifi
+        function reglages(rubrique: string): void {
+            if (racine.hub && racine.hub.ouvrirReglages) {
+                racine.hub.ouvert = true;
+                racine.hub.ouvrirReglages(rubrique);
+            }
+        }
+        // qs -c foyer ipc call hub personnaliser
+        function personnaliser(): void {
+            if (racine.hub && racine.hub.ouvrirPersonnaliser) {
+                racine.hub.ouvert = true;
+                racine.hub.ouvrirPersonnaliser();
+            }
         }
     }
 

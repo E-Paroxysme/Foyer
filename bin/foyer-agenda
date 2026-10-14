@@ -56,18 +56,18 @@ def fuseau():
 
 def calendriers(conf):
     """Liste des agendas réellement présents : [(id, chemin, nom, couleur, modifiable, source)]."""
-    res = [("personnel", DONNEES / "personnel", "Personnel", "", True, "sur ce PC")]
+    res = [("personnel", DONNEES / "personnel", "Personnel", "", True, "sur ce PC", "")]
     for i, s in enumerate(conf.get("sources", [])):
         couleur = s.get("couleur") or PALETTE[i % len(PALETTE)]
         base = DONNEES / s["nom"]
         if s["type"] == "ical":
-            res.append((s["nom"], base, s.get("titre", s["nom"]), couleur, False, "lien iCal"))
+            res.append((s["nom"], base, s.get("titre", s["nom"]), couleur, False, "lien iCal", s["nom"]))
         else:
             sous = sorted(p for p in base.glob("*") if p.is_dir()) if base.is_dir() else []
             for j, p in enumerate(sous):
                 nom = s.get("titre", s["nom"]) + ("" if len(sous) == 1 else " · " + p.name)
                 coul = couleur if j == 0 else PALETTE[(i + j) % len(PALETTE)]
-                res.append((s["nom"] + "-" + p.name, p, nom, coul, True, "CalDAV"))
+                res.append((s["nom"] + "-" + p.name, p, nom, coul, True, "CalDAV", s["nom"]))
     return res
 
 
@@ -77,7 +77,7 @@ def regenerer(conf=None):
     CACHE.mkdir(parents=True, exist_ok=True)
     tz = fuseau()
     lignes = ["# Généré par foyer-agenda (ne pas modifier).", "[calendars]"]
-    for cid, chemin, _nom, couleur, modifiable, _src in calendriers(conf):
+    for cid, chemin, _nom, couleur, modifiable, _src, _s in calendriers(conf):
         chemin.mkdir(parents=True, exist_ok=True)
         lignes += [f"[[{cid}]]", f"path = {chemin}"]
         if couleur:
@@ -163,7 +163,7 @@ def cmd_mois(args):
     nb = (dt.date(an + mois // 12, mois % 12 + 1, 1) - premier).days
     evts = [evenement(e) for e in khal_json(premier.isoformat(), f"{nb}d")]
     masques = set(conf.get("masques", []))
-    agendas = [{"id": c[0], "nom": c[2], "couleur": c[3], "modifiable": c[4], "source": c[5], "visible": c[0] not in masques}
+    agendas = [{"id": c[0], "nom": c[2], "couleur": c[3], "modifiable": c[4], "source": c[5], "branchement": c[6], "visible": c[0] not in masques}
                for c in calendriers(conf)]
     print(json.dumps({"agendas": agendas, "evenements": evts}, ensure_ascii=False))
 

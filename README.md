@@ -155,6 +155,13 @@ applications restent les officielles.
 Icône du compte (écran de verrouillage) : une image carrée dans `~/.face`, puis
 `foyer theme`. Sans elle, un rond aux couleurs du thème.
 
+Réglages : tape « réglages » (ou « wifi », « son », « thème », « batterie »…) dans
+la recherche du hub, ou `qs -c foyer ipc call hub reglages wifi`. Rubriques : compte
+(photo, nom, mot de passe, fond d'écran), Wi-Fi, Bluetooth, son, écran et énergie,
+souris et clavier, notifications, thème, accessibilité, confidentialité,
+applications par défaut, agendas, système. Ce qui est réglé ici est rangé dans
+`~/.config/foyer/reglages.json` et survit aux mises à jour.
+
 Agenda : clic sur la date du hub. Ajoute un événement en une phrase
 (« lundi de 14h à 15h réunion https://… // salle B12 » : la date, les heures, le
 lien de visio et la note après `//` sont reconnus). Les événements sont des

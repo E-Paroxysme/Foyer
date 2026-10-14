@@ -1,0 +1,475 @@
+#!/usr/bin/env python3
+# Géré par Foyer. Ce que la vue Réglages du hub lit et modifie. Chaque commande
+# répond en JSON (lecture) ou applique un réglage, puis s'arrête.
+#
+# Les réglages de Foyer sont rangés dans ~/.config/foyer/reglages.json ; les
+# fichiers produits (veille, souris, écran) sont réécrits à partir de lui.
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+HOME = Path.home()
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config"))
+FOYER = CONFIG / "foyer"
+HYPR = CONFIG / "hypr"
+REGLAGES = FOYER / "reglages.json"
+FOYER_DIR = Path(__file__).resolve().parent.parent
+THEME_PERSO = FOYER / "theme.json"
+
+DEFAUTS = {
+    "veille": {"ecran": 300, "verrou": 600, "suspension": 1200},
+    "entrees": {"sensibilite": 0.0, "defilementNaturel": True, "tapClic": True, "vitesseRepetition": 35},
+    "ecran": {"echelle": 1.0},
+    "compte": {"nom": ""},
+}
+
+
+def sortie(cmd, delai=8):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=delai).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def lancer(cmd, delai=30):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=delai).returncode
+    except (OSError, subprocess.TimeoutExpired):
+        return 1
+
+
+def fond(cmd):
+    try:
+        subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError:
+        pass
+
+
+def lire():
+    try:
+        r = json.loads(REGLAGES.read_text())
+    except (OSError, ValueError):
+        r = {}
+    for cle, val in DEFAUTS.items():
+        r.setdefault(cle, {})
+        for k, v in val.items():
+            r[cle].setdefault(k, v)
+    return r
+
+
+def ecrire(r):
+    FOYER.mkdir(parents=True, exist_ok=True)
+    tmp = REGLAGES.with_suffix(".tmp")
+    tmp.write_text(json.dumps(r, ensure_ascii=False, indent=2) + "\n")
+    tmp.replace(REGLAGES)
+
+
+def ecrire_fichier(chemin, texte):
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    if chemin.exists() and chemin.read_text() == texte:
+        return False
+    tmp = chemin.with_name("." + chemin.name + ".tmp")
+    tmp.write_text(texte)
+    tmp.replace(chemin)
+    return True
+
+
+def theme_en_fond():
+    fond([str(FOYER_DIR / "bin/foyer"), "theme"])
+
+
+# --- Lecture générale -----------------------------------------------------------
+def nom_compte():
+    r = lire()
+    if r["compte"].get("nom"):
+        return r["compte"]["nom"]
+    utilisateur = os.environ.get("USER") or sortie(["id", "-un"]).strip()
+    gecos = sortie(["getent", "passwd", utilisateur]).split(":")
+    return (gecos[4].split(",")[0] if len(gecos) > 4 and gecos[4] else utilisateur)
+
+
+def cmd_etat(_a):
+    r = lire()
+    utilisateur = os.environ.get("USER") or sortie(["id", "-un"]).strip()
+    try:
+        perso = json.loads(THEME_PERSO.read_text())
+    except (OSError, ValueError):
+        perso = {}
+    themes = []
+    for f in sorted((FOYER_DIR / "defaults/themes").glob("*.json")):
+        try:
+            d = json.loads(f.read_text())
+        except ValueError:
+            continue
+        themes.append({"id": f.stem, "nom": d.get("description", f.stem).split(" ")[0].rstrip(":"),
+                       "accent": d.get("couleurs", {}).get("accent", "#e8875a"),
+                       "panneau": d.get("couleurs", {}).get("panneau", "#1c1714")})
+    du = shutil.disk_usage(str(HOME))
+    infos = {}
+    for cle, fichier in (("modele", "product_version"), ("fabricant", "sys_vendor"), ("produit", "product_name")):
+        try:
+            infos[cle] = Path("/sys/class/dmi/id/" + fichier).read_text().strip()
+        except OSError:
+            infos[cle] = ""
+    cpu = ""
+    try:
+        m = re.search(r"model name\s*:\s*(.+)", Path("/proc/cpuinfo").read_text())
+        cpu = re.sub(r"\s+", " ", m.group(1)) if m else ""
+    except OSError:
+        pass
+    memoire = 0
+    try:
+        m = re.search(r"MemTotal:\s*(\d+)", Path("/proc/meminfo").read_text())
+        memoire = int(m.group(1)) * 1024 if m else 0
+    except OSError:
+        pass
+    td = dict(l.split("=", 1) for l in sortie(["timedatectl", "show"]).splitlines() if "=" in l)
+    profil = sortie(["powerprofilesctl", "get"]).strip()
+    defauts = {
+        "navigateur": sortie(["xdg-settings", "get", "default-web-browser"]).strip(),
+        "courriel": sortie(["xdg-mime", "query", "default", "x-scheme-handler/mailto"]).strip(),
+        "fichiers": sortie(["xdg-mime", "query", "default", "inode/directory"]).strip(),
+        "pdf": sortie(["xdg-mime", "query", "default", "application/pdf"]).strip(),
+        "images": sortie(["xdg-mime", "query", "default", "image/png"]).strip(),
+        "musique": sortie(["xdg-mime", "query", "default", "audio/mpeg"]).strip(),
+        "video": sortie(["xdg-mime", "query", "default", "video/mp4"]).strip(),
+    }
+    gs = lambda schema, cle: sortie(["gsettings", "get", schema, cle]).strip()
+    version = sortie(["git", "-C", str(FOYER_DIR), "describe", "--tags", "--always"]).strip()
+    print(json.dumps({
+        "compte": {"nom": nom_compte(), "utilisateur": utilisateur, "photo": (HOME / ".face").exists(),
+                   "photoChemin": str(HOME / ".face")},
+        "reglages": r,
+        "theme": {"base": perso.get("base", "braise"), "perso": perso, "liste": themes,
+                  "eco": (FOYER / "profil-graphique").exists() and (FOYER / "profil-graphique").read_text().strip() == "eco"},
+        "energie": profil,
+        "disque": {"utilise": du.used, "total": du.total},
+        "pc": {"modele": infos["modele"] or infos["produit"], "fabricant": infos["fabricant"], "processeur": cpu, "memoire": memoire,
+               "noyau": os.uname().release},
+        "heure": {"auto": td.get("NTP") == "yes", "fuseau": td.get("Timezone", "")},
+        "defauts": defauts,
+        "confidentialite": {"recents": gs("org.gnome.desktop.privacy", "remember-recent-files") != "false",
+                            "corbeille": gs("org.gnome.desktop.privacy", "remove-old-trash-files") == "true"},
+        "foyer": {"version": version},
+    }, ensure_ascii=False))
+
+
+# --- Wi-Fi (NetworkManager) -------------------------------------------------------
+def champs_nmcli(ligne):
+    return [c.replace("\\:", ":") for c in re.split(r"(?<!\\):", ligne)]
+
+
+def cmd_wifi(a):
+    if a.args and a.args[0] in ("on", "off"):
+        sys.exit(lancer(["nmcli", "radio", "wifi", a.args[0]]))
+    actif = sortie(["nmcli", "-t", "-f", "WIFI", "radio"]).strip() == "enabled"
+    reseaux, vus = [], set()
+    if actif:
+        brut = sortie(["nmcli", "-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY", "device", "wifi", "list", "--rescan", "auto"], 15)
+        connus = {champs_nmcli(l)[0] for l in sortie(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"]).splitlines()
+                  if l.endswith(":802-11-wireless")}
+        for l in brut.splitlines():
+            c = champs_nmcli(l)
+            if len(c) < 4 or not c[1] or c[1] in vus:
+                continue
+            vus.add(c[1])
+            reseaux.append({"nom": c[1], "connecte": c[0] == "*", "force": int(c[2] or 0),
+                            "protege": c[3] not in ("", "--"), "connu": c[1] in connus})
+        reseaux.sort(key=lambda w: (not w["connecte"], -w["force"]))
+    print(json.dumps({"actif": actif, "reseaux": reseaux}, ensure_ascii=False))
+
+
+def cmd_wifi_connecter(a):
+    ssid = a.args[0]
+    mdp = sys.stdin.readline().rstrip("\n") if not sys.stdin.isatty() else ""
+    connus = [champs_nmcli(l)[0] for l in sortie(["nmcli", "-t", "-f", "NAME", "connection", "show"]).splitlines()]
+    if ssid in connus and not mdp:
+        code = lancer(["nmcli", "connection", "up", "id", ssid])
+    else:
+        cmd = ["nmcli", "device", "wifi", "connect", ssid] + (["password", mdp] if mdp else [])
+        code = lancer(cmd, 45)
+    sys.exit(code)
+
+
+def cmd_wifi_oublier(a):
+    sys.exit(lancer(["nmcli", "connection", "delete", "id", a.args[0]]))
+
+
+# --- Bluetooth (bluetoothctl) -----------------------------------------------------
+def cmd_bt(a):
+    if a.args and a.args[0] in ("on", "off"):
+        sys.exit(lancer(["bluetoothctl", "power", a.args[0]]))
+    if a.args and a.args[0] == "chercher":
+        lancer(["bluetoothctl", "--timeout", "8", "scan", "on"], 12)
+    infos = sortie(["bluetoothctl", "show"])
+    actif = "Powered: yes" in infos
+    appareils = []
+    appaires = {l.split(" ", 2)[1] for l in sortie(["bluetoothctl", "devices", "Paired"]).splitlines() if l.startswith("Device ")}
+    for l in sortie(["bluetoothctl", "devices"]).splitlines():
+        p = l.split(" ", 2)
+        if len(p) < 3 or p[0] != "Device":
+            continue
+        mac, nom = p[1], p[2]
+        if nom.replace("-", ":") == mac:
+            continue  # appareil sans nom : bruit de la recherche
+        info = sortie(["bluetoothctl", "info", mac])
+        icone = re.search(r"Icon:\s*(\S+)", info)
+        batterie = re.search(r"Battery Percentage:.*\((\d+)\)", info)
+        appareils.append({"mac": mac, "nom": nom, "appaire": mac in appaires, "connecte": "Connected: yes" in info,
+                          "type": icone.group(1) if icone else "", "batterie": int(batterie.group(1)) if batterie else -1})
+    appareils.sort(key=lambda d: (not d["appaire"], not d["connecte"], d["nom"].lower()))
+    print(json.dumps({"actif": actif, "appareils": appareils}, ensure_ascii=False))
+
+
+def cmd_bt_action(a):
+    action, mac = a.args[0], a.args[1]
+    if action == "appairer":
+        code = lancer(["bluetoothctl", "--timeout", "15", "pair", mac], 20)
+        lancer(["bluetoothctl", "trust", mac])
+        code = lancer(["bluetoothctl", "--timeout", "10", "connect", mac], 15) if code == 0 else code
+    elif action == "connecter":
+        code = lancer(["bluetoothctl", "--timeout", "10", "connect", mac], 15)
+    elif action == "deconnecter":
+        code = lancer(["bluetoothctl", "disconnect", mac])
+    elif action == "oublier":
+        code = lancer(["bluetoothctl", "remove", mac])
+    else:
+        code = 2
+    sys.exit(code)
+
+
+# --- Écran, énergie, veille ----------------------------------------------------------
+def cmd_luminosite(a):
+    if a.args:
+        sys.exit(lancer(["brightnessctl", "-q", "set", f"{int(a.args[0])}%"]))
+    m = sortie(["brightnessctl", "-m"]).strip().split(",")
+    print(json.dumps({"disponible": len(m) > 3, "valeur": int(m[3].rstrip("%")) if len(m) > 3 else 100}))
+
+
+def ecrire_veille(r):
+    v = r["veille"]
+    lignes = ["# Géré par Foyer : produit par les Réglages du hub (ne pas modifier).",
+              "general {", "    lock_cmd = pidof hyprlock || hyprlock",
+              "    before_sleep_cmd = loginctl lock-session", "    after_sleep_cmd = hyprctl dispatch dpms on", "}"]
+    if v["ecran"]:
+        lignes += ["", "listener {", f"    timeout = {int(v['ecran'])}", "    on-timeout = hyprctl dispatch dpms off",
+                   "    on-resume = hyprctl dispatch dpms on", "}"]
+    if v["verrou"]:
+        lignes += ["", "listener {", f"    timeout = {int(v['verrou'])}", "    on-timeout = loginctl lock-session", "}"]
+    if v["suspension"]:
+        lignes += ["", "listener {", f"    timeout = {int(v['suspension'])}", "    on-timeout = systemctl suspend", "}"]
+    return ecrire_fichier(HYPR / "hypridle.conf", "\n".join(lignes) + "\n")
+
+
+def relancer_hypridle():
+    lancer(["pkill", "-x", "hypridle"])
+    fond(["uwsm", "app", "-s", "b", "-t", "service", "--", "hypridle"])
+
+
+def cmd_veille(a):
+    r = lire()
+    if a.args:
+        ecran, verrou, suspension = (int(x) for x in a.args[:3])
+        r["veille"] = {"ecran": ecran, "verrou": verrou, "suspension": suspension}
+        ecrire(r)
+    if ecrire_veille(r) and not a.sans_relance:
+        relancer_hypridle()
+
+
+def cmd_energie(a):
+    sys.exit(lancer(["powerprofilesctl", "set", a.args[0]]))
+
+
+def ecrire_entrees(r):
+    e, ec = r["entrees"], r["ecran"]
+    lua = f"""-- Géré par Foyer : produit par les Réglages du hub (ne pas modifier).
+hl.config({{
+	input = {{
+		sensitivity = {float(e['sensibilite']):.2f},
+		repeat_rate = {int(e['vitesseRepetition'])},
+		touchpad = {{
+			natural_scroll = {str(bool(e['defilementNaturel'])).lower()},
+			tap_to_click = {str(bool(e['tapClic'])).lower()},
+		}},
+	}},
+}})
+hl.monitor({{
+	output = "",
+	mode = "preferred",
+	position = "auto",
+	scale = "{float(ec['echelle']):g}",
+}})
+"""
+    return ecrire_fichier(HYPR / "reglages.lua", lua)
+
+
+def cmd_entrees(a):
+    r = lire()
+    for paire in a.args:
+        cle, _, val = paire.partition("=")
+        if cle in ("sensibilite",):
+            r["entrees"][cle] = max(-1.0, min(1.0, float(val)))
+        elif cle in ("defilementNaturel", "tapClic"):
+            r["entrees"][cle] = val in ("1", "true", "oui")
+        elif cle == "vitesseRepetition":
+            r["entrees"][cle] = int(val)
+        elif cle == "echelle":
+            r["ecran"]["echelle"] = float(val)
+    ecrire(r)
+    if ecrire_entrees(r) and not a.sans_relance:
+        lancer(["hyprctl", "reload"])
+
+
+# --- Compte, photo, fond -----------------------------------------------------------
+def magick():
+    return shutil.which("magick") or shutil.which("convert")
+
+
+def cmd_nom(a):
+    r = lire()
+    r["compte"]["nom"] = " ".join(a.args).strip()
+    ecrire(r)
+    theme_en_fond()
+
+
+def cmd_photo(a):
+    m = magick()
+    if not m:
+        sys.exit("ImageMagick absent")
+    code = lancer([m, a.args[0] + "[0]", "-auto-orient", "-resize", "512x512^", "-gravity", "center", "-extent", "512x512",
+                   "png:" + str(HOME / ".face")])
+    if code == 0:
+        theme_en_fond()
+    sys.exit(code)
+
+
+def cmd_fond(a):
+    cible = FOYER / "fond.jpg"
+    m = magick()
+    code = lancer([m, a.args[0] + "[0]", "-auto-orient", "-quality", "92", str(cible)]) if m else 1
+    if code != 0:
+        shutil.copyfile(a.args[0], cible)
+    lancer(["pkill", "-x", "swaybg"])
+    fond(["uwsm", "app", "-s", "b", "--", "swaybg", "-m", "fill", "-i", str(cible)])
+    theme_en_fond()
+
+
+def cmd_images(_a):
+    dossiers = [HOME / "Images", HOME / "Pictures", HOME / "Bureau", HOME / "Desktop", HOME / "Téléchargements",
+                HOME / "Downloads", FOYER_DIR / "defaults/fonds", Path("/usr/share/backgrounds")]
+    trouves = []
+    for d in dossiers:
+        if not d.is_dir():
+            continue
+        for f in sorted(d.rglob("*"), key=lambda p: -p.stat().st_mtime if p.exists() else 0):
+            if f.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp") and f.is_file():
+                trouves.append(str(f))
+                if len(trouves) >= 24:
+                    break
+        if len(trouves) >= 24:
+            break
+    print(json.dumps(trouves, ensure_ascii=False))
+
+
+# --- Thème -------------------------------------------------------------------------
+def cmd_theme(a):
+    """foyer-reglages theme base=ocean couleurs.accent=#4f8fe0 transparence.panneau=0.8 eco=1 …"""
+    try:
+        perso = json.loads(THEME_PERSO.read_text())
+    except (OSError, ValueError):
+        perso = {}
+    for paire in a.args:
+        cle, _, val = paire.partition("=")
+        if cle == "eco":
+            (FOYER / "profil-graphique").write_text(("eco" if val in ("1", "true") else "normal") + "\n")
+            continue
+        if cle == "reinitialiser":
+            perso = {k: v for k, v in perso.items() if k == "description"}
+            perso["base"] = "braise"
+            continue
+        if cle == "base":
+            # Changer de thème efface les retouches de couleur faites sur l'ancien.
+            perso.pop("couleurs", None)
+        try:
+            valeur = json.loads(val)
+        except ValueError:
+            valeur = val
+        o = perso
+        morceaux = cle.split(".")
+        for m in morceaux[:-1]:
+            o = o.setdefault(m, {})
+        if valeur is None:
+            o.pop(morceaux[-1], None)
+        else:
+            o[morceaux[-1]] = valeur
+    FOYER.mkdir(parents=True, exist_ok=True)
+    THEME_PERSO.write_text(json.dumps(perso, ensure_ascii=False, indent=2) + "\n")
+    theme_en_fond()
+
+
+# --- Applications par défaut, confidentialité, heure ----------------------------------
+def cmd_defaut(a):
+    genre, appli = a.args[0], a.args[1]
+    types = {
+        "courriel": ["x-scheme-handler/mailto"],
+        "fichiers": ["inode/directory"],
+        "pdf": ["application/pdf"],
+        "images": ["image/png", "image/jpeg", "image/webp", "image/gif"],
+        "musique": ["audio/mpeg", "audio/flac", "audio/ogg", "audio/x-wav"],
+        "video": ["video/mp4", "video/x-matroska", "video/webm"],
+    }
+    if genre == "navigateur":
+        sys.exit(lancer(["xdg-settings", "set", "default-web-browser", appli]))
+    sys.exit(max(lancer(["xdg-mime", "default", appli, t]) for t in types.get(genre, [])))
+
+
+def cmd_confidentialite(a):
+    for paire in a.args:
+        cle, _, val = paire.partition("=")
+        oui = "true" if val in ("1", "true") else "false"
+        if cle == "recents":
+            lancer(["gsettings", "set", "org.gnome.desktop.privacy", "remember-recent-files", oui])
+            if oui == "false":
+                (HOME / ".local/share/recently-used.xbel").unlink(missing_ok=True)
+        elif cle == "corbeille":
+            lancer(["gsettings", "set", "org.gnome.desktop.privacy", "remove-old-trash-files", oui])
+        elif cle == "presse-papier":
+            lancer(["cliphist", "wipe"])
+
+
+def cmd_heure(a):
+    sys.exit(lancer(["timedatectl", "set-ntp", "true" if a.args[0] in ("1", "true") else "false"]))
+
+
+# --- Appliquer tout (après une mise à jour) -------------------------------------------
+def cmd_appliquer(_a):
+    r = lire()
+    ecrire_veille(r)
+    ecrire_entrees(r)
+
+
+def main():
+    import argparse
+    p = argparse.ArgumentParser(prog="foyer-reglages")
+    p.add_argument("commande")
+    p.add_argument("args", nargs="*")
+    p.add_argument("--sans-relance", action="store_true")
+    a = p.parse_args()
+    table = {
+        "etat": cmd_etat, "wifi": cmd_wifi, "wifi-connecter": cmd_wifi_connecter, "wifi-oublier": cmd_wifi_oublier,
+        "bt": cmd_bt, "bt-action": cmd_bt_action, "luminosite": cmd_luminosite, "veille": cmd_veille,
+        "energie": cmd_energie, "entrees": cmd_entrees, "nom": cmd_nom, "photo": cmd_photo, "fond": cmd_fond,
+        "images": cmd_images, "theme": cmd_theme, "defaut": cmd_defaut, "confidentialite": cmd_confidentialite,
+        "heure": cmd_heure, "appliquer": cmd_appliquer,
+    }
+    if a.commande not in table:
+        sys.exit("Commande inconnue : " + a.commande)
+    table[a.commande](a)
+
+
+if __name__ == "__main__":
+    main()

@@ -34,6 +34,8 @@ require("entrees")
 require("apparence")
 -- Couleurs, bordures et arrondis du thème (produit par « foyer theme »)
 pcall(require, "theme")
+-- Réglages faits dans le hub (souris, pavé tactile, taille de l'affichage)
+pcall(require, "reglages")
 require("raccourcis")
 require("demarrage")
 

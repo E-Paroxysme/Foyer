@@ -51,7 +51,8 @@ else
   printf 'eco.barres\t24\neco.images\t30\n' >>"$valeurs"
 fi
 utilisateur="${USER:-$(id -un)}"
-nom="$(getent passwd "$utilisateur" | cut -d: -f5 | cut -d, -f1)"
+nom="$(jq -r '.compte.nom // ""' "$FOYER_CONFIG/foyer/reglages.json" 2>/dev/null || true)"
+[[ -n "$nom" ]] || nom="$(getent passwd "$utilisateur" | cut -d: -f5 | cut -d, -f1)"
 printf 'verrou.nom\t%s\nverrou.image\t%s\n' "${nom:-$utilisateur}" "$cache/verrou.png" >>"$valeurs"
 
 # --- Icônes des dossiers aux couleurs du thème --------------------------------

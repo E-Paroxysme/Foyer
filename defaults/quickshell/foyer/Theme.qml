@@ -29,6 +29,8 @@ Singleton {
     // Profil « eco » (carte graphique ancienne) : moins d'effets et d'animations.
     FileView {
         path: Quickshell.env("HOME") + "/.config/foyer/profil-graphique"
+        watchChanges: true
+        onFileChanged: reload()
         onLoaded: theme.eco = text().trim() === "eco"
     }
 

@@ -18,7 +18,8 @@ PanelWindow {
     id: hub
 
     property bool ouvert: false
-    property string vue: "accueil"          // accueil | calendrier
+    property string vue: "accueil"          // accueil | calendrier | reglages
+    property var pastille: null             // donnée par shell.qml (Ne pas déranger dans les réglages)
     property var tuiles: []
     property var disposition: ({})
     property var resultats: []
@@ -191,6 +192,29 @@ PanelWindow {
         if (calcul !== null)
             res.push({ genre: "calcul", groupe: "Calcul", nom: brut.replace(/\*/g, " × ") + " = " + String(calcul).replace(".", ","), detail: "Entrée pour copier", icone: "", valeur: String(calcul) });
 
+        // Réglages : « wifi », « son », « thème »… ouvrent directement la bonne rubrique.
+        const motsReglages = [
+            ["accueil", "Réglages", "reglages parametres preferences configuration options"],
+            ["wifi", "Wi-Fi", "wifi wi-fi reseau internet connexion sans fil"],
+            ["bluetooth", "Bluetooth", "bluetooth casque ecouteurs souris sans fil appairer"],
+            ["son", "Son", "son volume audio haut-parleurs micro micros sortie casque"],
+            ["ecran", "Écran et énergie", "ecran luminosite veille energie batterie verrouillage affichage echelle"],
+            ["entrees", "Souris et clavier", "souris clavier pave tactile touchpad pointeur defilement"],
+            ["notifications", "Notifications", "notifications ne pas deranger alertes"],
+            ["theme", "Thème", "theme couleur couleurs accent transparence arrondi apparence"],
+            ["accessibilite", "Accessibilité", "accessibilite taille texte police grand animations contraste"],
+            ["confidentialite", "Confidentialité", "confidentialite vie privee fichiers recents corbeille presse-papier"],
+            ["defauts", "Applications par défaut", "applications par defaut navigateur courriel pdf ouvrir avec"],
+            ["agendas", "Agendas", "agenda agendas calendrier pronote caldav ical"],
+            ["systeme", "Système", "systeme mise a jour version disque stockage a propos imprimante heure date"],
+            ["compte", "Compte", "compte photo nom mot de passe utilisateur fond d'ecran avatar"]
+        ];
+        let nbReglages = 0;
+        for (const m of motsReglages) {
+            if (nbReglages < 2 && (normaliser(m[1]).startsWith(q) || m[2].split(" ").some(w => q.length >= 3 && w.startsWith(q))))
+                res.push({ genre: "reglage", groupe: "Réglages", nom: m[1], detail: m[0] === "accueil" ? "Tous les réglages" : "Réglages › " + m[1], icone: "preferences-system", valeur: m[0] }), nbReglages++;
+        }
+
         const apps = [];
         for (const a of DesktopEntries.applications.values) {
             const n = normaliser(a.name);
@@ -330,6 +354,9 @@ PanelWindow {
         case "tuile":
             lancerTuile(r.donnee);
             break;
+        case "reglage":
+            ouvrirReglages(r.valeur);
+            return;
         case "fenetre":
             montrerFenetre(r.donnee);
             break;
@@ -412,7 +439,9 @@ PanelWindow {
     }
 
     function echap() {
-        if (vue === "calendrier")
+        if (vue === "reglages")
+            vueReglages.retour();
+        else if (vue === "calendrier")
             vue = "accueil";
         else
             ouvert = false;
@@ -442,6 +471,11 @@ PanelWindow {
     // Hauteur du hub au moment d'ouvrir le calendrier : le calendrier tient dedans
     // (il se réduit au besoin) au lieu d'agrandir le hub jusqu'au bord de l'écran.
     readonly property real hauteurAccueil: Math.max(540, vueAccueil.implicitHeight)
+    function ouvrirReglages(rubrique) {
+        recherche.text = "";
+        vue = "reglages";
+        vueReglages.ouvrir(rubrique);
+    }
     function ouvrirCalendrier() {
         vue = "calendrier";
         vueCalendrier.ouvrir();
@@ -459,7 +493,7 @@ PanelWindow {
     Rectangle {
         id: panneau
         width: Math.min(720, hub.width - 48)
-        height: (hub.vue === "calendrier" ? hub.hauteurAccueil : vueAccueil.implicitHeight) + 52
+        height: (hub.vue === "accueil" ? vueAccueil.implicitHeight : hub.hauteurAccueil) + 52
         anchors.horizontalCenter: parent.horizontalCenter
         y: Math.max(24, Math.min(48, hub.height * 0.05))
         radius: Theme.arrondiPanneau
@@ -1128,6 +1162,27 @@ PanelWindow {
                 NumberAnimation { duration: Theme.duree }
             }
             onFermer: hub.echap()
+        }
+
+        // ===================== Vue réglages =====================
+        Reglages {
+            id: vueReglages
+            x: 28
+            y: 26
+            width: parent.width - 56
+            height: hub.hauteurAccueil
+            hauteurMax: hub.hauteurAccueil
+            pastille: hub.pastille
+            actif: hub.vue === "reglages" && hub.ouvert
+            opacity: hub.vue === "reglages" ? 1 : 0
+            visible: opacity > 0
+            Behavior on opacity {
+                NumberAnimation { duration: Theme.duree }
+            }
+            onFermer: {
+                hub.vue = "accueil";
+                recherche.forceActiveFocus();
+            }
         }
     }
 }

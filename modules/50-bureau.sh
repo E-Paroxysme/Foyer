@@ -34,6 +34,8 @@ else
   printf -- '-- Géré par Foyer (profil graphique « normal »)\n' >"$materiel"
 fi
 deposer "$materiel" "$FOYER_CONFIG/hypr/materiel.lua"
+# Réglages faits dans le hub (veille, souris, écran) : réécrits par-dessus les fichiers par défaut.
+"$FOYER_DIR/bin/foyer-reglages" appliquer || avertir "Réglages du hub non appliqués."
 rm -f "$materiel"
 
 # Fichier personnel : créé une seule fois, jamais remplacé.
