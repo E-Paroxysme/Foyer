@@ -1,0 +1,13 @@
+{
+  "description": "Ardoise : gris bleuté, très sobre.",
+  "couleurs": {
+    "accent": "#a9b4c2",
+    "accentClair": "#d5dbe3",
+    "accentFonce": "#7d8896",
+    "panneau": "#16181b",
+    "fondTerminal": "#121417"
+  },
+  "gtk": {
+    "accent": "slate"
+  }
+}

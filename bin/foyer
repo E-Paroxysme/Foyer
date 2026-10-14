@@ -6,7 +6,9 @@
 #   foyer modules            liste les modules disponibles
 #   foyer groupes            liste les groupes de logiciels optionnels
 #   foyer installer <groupe> installe un groupe optionnel (ex. : foyer installer si)
-#   foyer theme              applique ~/.config/foyer/theme.json à tout le bureau
+#   foyer theme liste        liste les thèmes disponibles
+#   foyer theme <nom>        choisit un thème (ex. : foyer theme ocean)
+#   foyer theme              réapplique le thème (après avoir modifié ~/.config/foyer/theme.json)
 #   foyer version            affiche la version installée
 #   foyer history            liste les versions installées sur cet ordinateur
 #   foyer rollback           revient à la version précédente de Foyer
@@ -292,6 +294,25 @@ case "$cmd" in
     afficher_historique
     ;;
   theme)
+    perso="$FOYER_CONFIG/foyer/theme.json"
+    actuel="$(jq -r '.base // "braise"' "$perso" 2>/dev/null || echo braise)"
+    if [[ "${2:-}" == "liste" ]]; then
+      echo "Thèmes disponibles (✔ = actuel) :"
+      for t in "$FOYER_DIR"/defaults/themes/*.json; do
+        nom="$(basename "$t" .json)"; marque="  "; [[ "$nom" == "$actuel" ]] && marque="✔ "
+        printf '  %s%-10s %s\n' "$marque" "$nom" "$(jq -r '.description // ""' "$t")"
+      done
+      echo; echo "Choisir : foyer theme <nom>"
+      exit 0
+    fi
+    if [[ -n "${2:-}" ]]; then
+      [[ -f "$FOYER_DIR/defaults/themes/$2.json" ]] || erreur "Thème inconnu : $2 (voir : foyer theme liste)"
+      mkdir -p "$FOYER_CONFIG/foyer"
+      [[ -f "$perso" ]] || echo '{}' >"$perso"
+      tmp="$(mktemp)"
+      jq --arg b "$2" '.base = $b' "$perso" >"$tmp" || erreur "Le fichier ~/.config/foyer/theme.json est illisible."
+      mv "$tmp" "$perso"
+    fi
     f="$(lister_modules | grep -E '/[0-9]{2}-theme\.sh$')"
     preparer_progression "$f"
     lancer_module "$f"
@@ -322,11 +343,11 @@ case "$cmd" in
     succes "Groupe « $2 » installé."
     ;;
   aide|-h|--help)
-    sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     ;;
   *)
     printf 'Commande inconnue : « %s »\n\n' "$cmd" >&2
-    sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     exit 1
     ;;
 esac

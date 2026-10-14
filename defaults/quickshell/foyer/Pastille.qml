@@ -78,7 +78,7 @@ PanelWindow {
     function montrerNotif(n) {
         notifCourante = n;
         mode = "notif";
-        minuteur.interval = 5000;
+        minuteur.interval = 8000;
         minuteur.restart();
     }
 
@@ -88,7 +88,7 @@ PanelWindow {
         if (mode === "notif" && minuteur.running && m !== "batterie")
             return;  // une notification en cours garde la priorité
         mode = m;
-        minuteur.interval = m === "batterie" ? 8000 : 2000;
+        minuteur.interval = m === "batterie" ? 9000 : 2600;
         minuteur.restart();
     }
 
@@ -199,6 +199,18 @@ PanelWindow {
     }
     readonly property bool temoins: micros.length > 0 || videos.length > 0
 
+    // Au repos (rien à montrer), la pastille disparaît. Elle revient pour une
+    // notification, un affichage, un témoin, des notifications non lues, ou quand
+    // la souris passe tout en bas au centre de l'écran.
+    property bool survolBas: false
+    readonly property bool active: mode !== "" || historique || temoins || nonLues > 0 || survolBas
+    readonly property int dureeAnim: Math.round(Theme.duree * 1.5)
+    Timer {
+        id: delaiDisparition
+        interval: 700
+        onTriggered: pastille.survolBas = false
+    }
+
     // --- Taille de la pilule selon ce qu'elle montre -----------------------------
     readonly property size taille: {
         switch (mode) {
@@ -216,11 +228,25 @@ PanelWindow {
     // Zone qui reçoit la souris : la pilule, plus l'historique s'il est ouvert.
     Item {
         id: zone
-        readonly property real largeur: Math.max(pilule.width, panneau.visible ? panneau.width : 0)
+        readonly property real largeur: pastille.active ? Math.max(pilule.width, panneau.visible ? panneau.width : 0) : 280
         x: (pastille.width - largeur) / 2
-        y: panneau.visible ? panneau.y : pilule.y
+        y: !pastille.active ? pastille.height - 8 : (panneau.visible ? panneau.y : pilule.y)
         width: largeur
-        height: pilule.y + pilule.height - y
+        height: pastille.height - y
+        // Survol : fait apparaître la pastille (bande fine tout en bas quand elle est cachée)
+        MouseArea {
+            anchors.fill: parent
+            hoverEnabled: true
+            acceptedButtons: Qt.NoButton
+            onContainsMouseChanged: {
+                if (containsMouse) {
+                    delaiDisparition.stop();
+                    pastille.survolBas = true;
+                } else {
+                    delaiDisparition.restart();
+                }
+            }
+        }
     }
 
     // ===================== La pilule =====================
@@ -232,20 +258,33 @@ PanelWindow {
         width: pastille.taille.width
         height: pastille.taille.height
         radius: height / 2
+        opacity: pastille.active ? 1 : 0
+        scale: pastille.active ? 1 : 0.6
+        transformOrigin: Item.Bottom
+        visible: opacity > 0
+        Behavior on opacity {
+            NumberAnimation { duration: pastille.dureeAnim * 0.6 }
+        }
+        Behavior on scale {
+            NumberAnimation {
+                duration: pastille.dureeAnim
+                easing.type: Easing.OutBack
+            }
+        }
         color: Theme.panneau
         border.width: 1
         border.color: pastille.mode === "notif" || pastille.mode === "batterie" || pastille.historique ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.55) : Theme.trait
         clip: true
         Behavior on width {
             NumberAnimation {
-                duration: Theme.duree
+                duration: pastille.dureeAnim
                 easing.type: Easing.OutBack
                 easing.overshoot: 1.1
             }
         }
         Behavior on height {
             NumberAnimation {
-                duration: Theme.duree
+                duration: pastille.dureeAnim
                 easing.type: Easing.OutBack
             }
         }
@@ -390,10 +429,9 @@ PanelWindow {
             Behavior on opacity {
                 NumberAnimation { duration: 200 }
             }
-            Text {
-                text: pastille.mode === "luminosite" ? "☀" : (pastille.muet ? "🔇" : "🔊")
-                color: Theme.texte
-                font.pixelSize: 18
+            Icone {
+                nom: pastille.mode === "luminosite" ? "luminosite" : (pastille.muet ? "muet" : "volume")
+                taille: 20
             }
             Rectangle {
                 Layout.fillWidth: true
@@ -438,9 +476,10 @@ PanelWindow {
             Behavior on opacity {
                 NumberAnimation { duration: 200 }
             }
-            Text {
-                text: "🪫"
-                font.pixelSize: 18
+            Icone {
+                nom: "batterie"
+                couleur: Theme.accent
+                taille: 22
             }
             ColumnLayout {
                 spacing: 0

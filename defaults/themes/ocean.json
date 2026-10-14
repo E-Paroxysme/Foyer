@@ -1,0 +1,13 @@
+{
+  "description": "Océan : bleu profond, reflets clairs.",
+  "couleurs": {
+    "accent": "#4f8fe0",
+    "accentClair": "#9cc4f2",
+    "accentFonce": "#2f6fc0",
+    "panneau": "#121821",
+    "fondTerminal": "#0e131a"
+  },
+  "gtk": {
+    "accent": "blue"
+  }
+}

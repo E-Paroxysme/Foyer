@@ -111,7 +111,9 @@ foyer update vie-privee  # un seul module
 foyer modules            # liste des modules
 foyer groupes            # groupes de logiciels optionnels (✔ = installé)
 foyer installer si       # ajoute un groupe plus tard
-foyer theme              # applique ~/.config/foyer/theme.json partout
+foyer theme liste        # thèmes disponibles (braise, ocean, foret, aube, ardoise)
+foyer theme ocean        # choisit un thème
+foyer theme              # réapplique après avoir modifié ~/.config/foyer/theme.json
 foyer version            # version installée
 foyer history            # versions installées sur cet ordinateur
 foyer rollback           # revient à la version précédente de Foyer
@@ -137,8 +139,9 @@ Disposition du hub : `~/.config/foyer/disposition.json` (jamais écrasé, relu t
 seul) : en-tête `compacte`, `ligne` ou `centree` ; bureaux `titres`, `segments`
 ou `badges` ; égaliseur `colonnes` ou `aucun` ; widgets à afficher.
 
-Thème : `~/.config/foyer/theme.json` (jamais écrasé). Mets-y seulement ce que tu
-veux changer, avec les noms du thème par défaut
+Thème : `foyer theme <nom>` choisit un thème tout prêt. Pour l'ajuster,
+`~/.config/foyer/theme.json` (jamais écrasé, il retient le thème choisi dans
+`base`) : mets-y seulement ce que tu veux changer, avec les noms du thème par défaut
 (`~/.local/share/foyer/defaults/foyer/theme.json`), puis `foyer theme`. Exemple :
 
 ```json

@@ -20,17 +20,21 @@ mkdir -p "$FOYER_CONFIG/foyer" "$FOYER_CONFIG/quickshell/foyer" "$cache"
 if [[ ! -f "$perso" ]]; then
   cat >"$perso" <<'EOF'
 {
-  "description": "Tes réglages de thème. Mets ici seulement ce que tu veux changer, avec les mêmes noms que dans le thème par défaut (voir ~/.local/share/foyer/defaults/foyer/theme.json), puis lance : foyer theme. Exemple : \"couleurs\": { \"accent\": \"#5aa0e8\" }"
+  "description": "Tes réglages de thème. Choisis un thème avec « foyer theme <nom> » (liste : foyer theme liste). Pour aller plus loin, ajoute ici seulement ce que tu veux changer, avec les mêmes noms que dans ~/.local/share/foyer/defaults/foyer/theme.json, puis lance : foyer theme. Exemple : \"couleurs\": { \"accent\": \"#5aa0e8\" }",
+  "base": "braise"
 }
 EOF
   info "Fichier de thème personnel créé : ~/.config/foyer/theme.json"
 fi
 
-info "Thème : fusion du thème par défaut et de tes réglages"
+# Thème de base choisi (« foyer theme <nom> ») : braise si rien n'est indiqué.
+base="$(jq -r '.base // "braise"' "$perso" 2>/dev/null || echo braise)"
+[[ -f "$D/themes/$base.json" ]] || { avertir "Thème « $base » inconnu : braise utilisé."; base=braise; }
+info "Thème : $base, avec tes réglages personnels"
 tmp="$(mktemp)"
-if ! jq -s '.[0] * .[1]' "$D/foyer/theme.json" "$perso" >"$tmp" 2>/dev/null; then
+if ! jq -s '.[0] * .[1] * .[2]' "$D/foyer/theme.json" "$D/themes/$base.json" "$perso" >"$tmp" 2>/dev/null; then
   avertir "Le fichier ~/.config/foyer/theme.json est illisible (virgule oubliée ?) : thème par défaut utilisé."
-  cp "$D/foyer/theme.json" "$tmp"
+  jq -s '.[0] * .[1]' "$D/foyer/theme.json" "$D/themes/$base.json" >"$tmp"
 fi
 deposer "$tmp" "$final"
 rm -f "$tmp"

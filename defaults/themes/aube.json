@@ -1,0 +1,13 @@
+{
+  "description": "Aube : rose et violet.",
+  "couleurs": {
+    "accent": "#e0559a",
+    "accentClair": "#f3a6c8",
+    "accentFonce": "#b83a7a",
+    "panneau": "#1c1419",
+    "fondTerminal": "#171015"
+  },
+  "gtk": {
+    "accent": "pink"
+  }
+}

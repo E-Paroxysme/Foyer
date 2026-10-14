@@ -1,0 +1,13 @@
+{
+  "description": "Forêt : vert mousse sur sous-bois.",
+  "couleurs": {
+    "accent": "#5fb36a",
+    "accentClair": "#a8dba9",
+    "accentFonce": "#3f8f4c",
+    "panneau": "#131a15",
+    "fondTerminal": "#0f1511"
+  },
+  "gtk": {
+    "accent": "green"
+  }
+}
