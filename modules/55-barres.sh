@@ -31,7 +31,7 @@ if ! hyprpm update >>"$journal" 2>&1; then
   essai=$(tail -n +"$((debut + 1))" "$journal" || true)
   cause=$(grep -A4 -E "CMake Error|error:|rror" <<<"$essai" | tail -8 || true)
   [[ -n "$cause" ]] || cause=$(tail -8 <<<"$essai" || true)
-  while IFS= read -r l; do [[ -n "$l" ]] && avertir "  $l"; done <<<"$cause"
+  while IFS= read -r l; do if [[ -n "$l" ]]; then avertir "  $l"; fi; done <<<"$cause"
   avertir "hyprpm update a échoué (détails : $journal). Pas de barres de titre pour l'instant."
   exit 0
 fi
