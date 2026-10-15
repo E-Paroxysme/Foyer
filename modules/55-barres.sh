@@ -23,9 +23,15 @@ journal="${XDG_STATE_HOME:-$HOME/.local/state}/foyer/hyprpm.log"
 mkdir -p "$(dirname "$journal")"
 
 info "Barres de titre : en-têtes d'Hyprland (première fois : quelques minutes)"
+debut=$(wc -l <"$journal" 2>/dev/null || echo 0)
 if ! hyprpm update >>"$journal" 2>&1; then
-  # La ligne utile (dépendance manquante) suit « CMake Error » : on la montre.
-  grep -A4 "CMake Error" "$journal" | tail -6 | while IFS= read -r l; do avertir "  $l"; done
+  # On montre la cause : la ligne qui suit « CMake Error » s'il y en a une,
+  # sinon les dernières lignes de cette tentative. (|| true : un grep sans
+  # résultat ne doit pas faire échouer tout le module.)
+  essai=$(tail -n +"$((debut + 1))" "$journal" || true)
+  cause=$(grep -A4 -E "CMake Error|error:|rror" <<<"$essai" | tail -8 || true)
+  [[ -n "$cause" ]] || cause=$(tail -8 <<<"$essai" || true)
+  while IFS= read -r l; do [[ -n "$l" ]] && avertir "  $l"; done <<<"$cause"
   avertir "hyprpm update a échoué (détails : $journal). Pas de barres de titre pour l'instant."
   exit 0
 fi
