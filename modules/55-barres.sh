@@ -24,14 +24,29 @@ mkdir -p "$(dirname "$journal")"
 
 info "Barres de titre : en-têtes d'Hyprland (première fois : quelques minutes)"
 debut=$(wc -l <"$journal" 2>/dev/null || echo 0)
-if ! hyprpm update >>"$journal" 2>&1; then
+mettre_a_jour() {
+  hyprpm update >>"$journal" 2>&1 && return 0
+  # Sous-module des sources (ex. subprojects/udis86) resté vide : clone incomplet
+  # en cache. On vide le cache et on retente une fois, en mode bavard pour que le
+  # journal contienne la sortie de git si ça recommence.
+  if tail -n +"$((debut + 1))" "$journal" | grep -q "does not contain a CMakeLists.txt"; then
+    info "Barres de titre : sources incomplètes, nouvel essai avec un cache propre"
+    hyprpm purge-cache >>"$journal" 2>&1 <<<"y" || true
+    hyprpm update -v >>"$journal" 2>&1 && return 0
+  fi
+  return 1
+}
+if ! mettre_a_jour; then
   # On montre la cause : la ligne qui suit « CMake Error » s'il y en a une,
   # sinon les dernières lignes de cette tentative. (|| true : un grep sans
   # résultat ne doit pas faire échouer tout le module.)
   essai=$(tail -n +"$((debut + 1))" "$journal" || true)
   # hyprpm retire la ligne « CMake Error at » et recopie la suite : la cause est
   # juste après « cmake complained: », pas à la fin du journal.
-  cause=$(grep -A8 "cmake complained" <<<"$essai" | head -9 || true)
+  cause=$(grep -A8 "cmake complained" <<<"$essai" | tail -9 || true)
+  # Sortie de git (mode bavard) : dit pourquoi un sous-module n'a pas été récupéré.
+  git_sortie=$(grep -A6 "git returned (rs)" <<<"$essai" | grep -iE "fatal|error|unable|could not" | head -4 || true)
+  [[ -z "$git_sortie" ]] || cause="$cause"$'\n'"$git_sortie"
   [[ -n "$cause" ]] || cause=$(grep -B2 -A4 -iE "error" <<<"$essai" | head -10 || true)
   [[ -n "$cause" ]] || cause=$(tail -8 <<<"$essai" || true)
   while IFS= read -r l; do if [[ -n "$l" ]]; then avertir "  $l"; fi; done <<<"$cause"
