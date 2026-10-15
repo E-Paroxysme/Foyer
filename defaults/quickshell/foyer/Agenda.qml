@@ -22,6 +22,7 @@ Item {
     property var evenements: []
     property string ouvert: ""           // uid + date de l'événement déplié
     property string message: ""
+    property var edition: null           // événement en cours de modification
 
     readonly property string script: Quickshell.env("HOME") + "/.local/share/foyer/bin/foyer-agenda"
     readonly property date moisAffiche: new Date(dateRef.getFullYear(), dateRef.getMonth() + moisDecalage, 1)
@@ -40,6 +41,7 @@ Item {
         ouvert = "";
         champ.text = "";
         message = "";
+        edition = null;
         charger();
         champ.forceActiveFocus();
     }
@@ -73,9 +75,10 @@ Item {
     }
     Process {
         id: action
+        stderr: StdioCollector { id: erreurAction }
         onExited: code => {
             if (code !== 0)
-                agenda.message = "L'agenda n'a pas pu être modifié.";
+                agenda.message = erreurAction.text.trim() || "L'agenda n'a pas pu être modifié.";
             agenda.charger();
         }
     }
@@ -148,7 +151,7 @@ Item {
         if ((m = t.match(/\s(après-demain)\s/i))) { r.date = new Date(auj.getFullYear(), auj.getMonth(), auj.getDate() + 2); t = t.replace(m[1], " "); }
         else if ((m = t.match(/\s(demain)\s/i))) { r.date = new Date(auj.getFullYear(), auj.getMonth(), auj.getDate() + 1); t = t.replace(m[1], " "); }
         else if ((m = t.match(/\s(aujourd'hui|aujourd’hui)\s/i))) { r.date = auj; t = t.replace(m[1], " "); }
-        else if ((m = t.match(new RegExp("\\s(?:le\\s+)?(\\d{1,2})\\s+(" + nomsMois.join("|") + ")\\s", "i")))) { r.date = new Date(auj.getFullYear(), nomsMois.indexOf(m[2].toLowerCase()), Number(m[1])); t = t.replace(m[0], " "); }
+        else if ((m = t.match(new RegExp("\\s(?:le\\s+)?(\\d{1,2})\\s+(" + nomsMois.join("|") + ")(?:\\s+(\\d{4}))?\\s", "i")))) { r.date = new Date(m[3] ? Number(m[3]) : auj.getFullYear(), nomsMois.indexOf(m[2].toLowerCase()), Number(m[1])); t = t.replace(m[0], " "); }
         else if ((m = t.match(/\s(?:le\s+)?(\d{1,2})\/(\d{1,2})\s/))) { r.date = new Date(auj.getFullYear(), Number(m[2]) - 1, Number(m[1])); t = t.replace(m[0], " "); }
         else if ((m = t.match(new RegExp("\\s(" + jours.join("|") + ")(?:\\s+prochain)?\\s", "i")))) { const cible = jours.indexOf(m[1].toLowerCase()); const d = new Date(auj); d.setDate(d.getDate() + ((cible - d.getDay() + 7) % 7 || 7)); r.date = d; t = t.replace(m[0], " "); }
         else if ((m = t.match(/\sle\s+(\d{1,2})\s/i))) { r.date = new Date(base.getFullYear(), base.getMonth(), Number(m[1])); t = t.replace(m[0], " "); }
@@ -159,11 +162,42 @@ Item {
     function hh(x) {
         return String(x[0]).padStart(2, "0") + ":" + String(x[1]).padStart(2, "0");
     }
+    // Phrase équivalente à un événement existant : on la remet dans le champ
+    // pour la modifier, puis « Enregistrer » remplace l'événement.
+    function phrase(e) {
+        const d = new Date(e.date + "T00:00:00");
+        let t = "le " + d.getDate() + " " + nomsMois[d.getMonth()];
+        if (d.getFullYear() !== new Date().getFullYear())
+            t += " " + d.getFullYear();
+        if (e.debut)
+            t += " de " + e.debut.replace(":", "h") + " à " + (e.fin || e.debut).replace(":", "h");
+        t += " " + e.titre;
+        if (e.lien)
+            t += " " + e.lien;
+        if (e.note)
+            t += " // " + e.note.replace(/\s*\n\s*/g, " ");
+        return t;
+    }
+    function modifier(e) {
+        edition = e;
+        ouvert = "";
+        message = "";
+        champ.text = phrase(e);
+        champ.forceActiveFocus();
+        champ.cursorPosition = champ.text.length;
+    }
+    function annulerEdition() {
+        edition = null;
+        champ.text = "";
+        message = "";
+    }
     function ajouter() {
         const p = apercu;
         if (!p || !p.titre)
             return;
         const cmd = [script, "ajouter", "--date", iso(p.date), "--titre", p.titre];
+        if (edition)
+            cmd.push("--remplace", edition.uid);
         if (p.debut) cmd.push("--debut", hh(p.debut), "--fin", hh(p.fin));
         if (p.lien) cmd.push("--lien", p.lien);
         if (p.note) cmd.push("--note", p.note);
@@ -173,6 +207,7 @@ Item {
         jourChoisi = p.date.getDate();
         champ.text = "";
         message = "";
+        edition = null;
     }
 
     // --- Interface ------------------------------------------------------------
@@ -534,6 +569,11 @@ Item {
                                 }
                                 Bouton {
                                     visible: carte.info.modifiable
+                                    texte: "Modifier"
+                                    onClic: agenda.modifier(carte.modelData)
+                                }
+                                Bouton {
+                                    visible: carte.info.modifiable
                                     texte: "Supprimer"
                                     onClic: {
                                         agenda.ouvert = "";
@@ -575,7 +615,7 @@ Item {
                         anchors.rightMargin: 6
                         spacing: 8
                         Text {
-                            text: "+"
+                            text: agenda.edition ? "✎" : "+"
                             color: Theme.accent
                             font.family: Theme.police
                             font.pixelSize: 18
@@ -590,7 +630,7 @@ Item {
                             font.pixelSize: 14
                             placeholderText: "Réunion parents de 14h à 15h // salle B12"
                             placeholderTextColor: Theme.discret
-                            Keys.onEscapePressed: agenda.fermer()
+                            Keys.onEscapePressed: agenda.edition ? agenda.annulerEdition() : agenda.fermer()
                             Keys.onReturnPressed: agenda.ajouter()
                             Keys.onEnterPressed: agenda.ajouter()
                             // Champ vide : ← → changent de mois, comme avant.
@@ -604,7 +644,12 @@ Item {
                             }
                         }
                         Bouton {
-                            texte: "Ajouter"
+                            visible: agenda.edition !== null
+                            texte: "Annuler"
+                            onClic: agenda.annulerEdition()
+                        }
+                        Bouton {
+                            texte: agenda.edition ? "Enregistrer" : "Ajouter"
                             plein: agenda.apercu !== null && agenda.apercu.titre.length > 0
                             onClic: agenda.ajouter()
                         }

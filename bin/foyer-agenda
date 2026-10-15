@@ -175,10 +175,33 @@ def echap(t):
 def cmd_ajouter(args):
     conf = lire_conf()
     regenerer(conf)
-    cible = next((c for c in calendriers(conf) if c[0] == args.agenda and c[4]), None)
-    if not cible:
-        sys.exit(f"Agenda non modifiable ou inconnu : {args.agenda}")
-    uid = f"{uuid.uuid4()}@foyer"
+    fichier = None
+    if args.remplace:
+        # Modification : on réécrit le même fichier avec le même UID (la
+        # synchronisation CalDAV y voit une mise à jour, pas un nouvel événement).
+        for c in calendriers(conf):
+            if not c[4]:
+                continue
+            for f in c[1].glob("*.ics"):
+                try:
+                    contenu = f.read_text(errors="ignore")
+                except OSError:
+                    continue
+                if re.search(r"^UID:" + re.escape(args.remplace) + r"\s*$", contenu, re.M):
+                    if re.search(r"^RRULE", contenu, re.M):
+                        sys.exit("Événement répétitif : modifie-le dans l'application d'origine.")
+                    cible, fichier = c, f
+                    break
+            if fichier:
+                break
+        if not fichier:
+            sys.exit("Événement introuvable ou en lecture seule.")
+        uid = args.remplace
+    else:
+        cible = next((c for c in calendriers(conf) if c[0] == args.agenda and c[4]), None)
+        if not cible:
+            sys.exit(f"Agenda non modifiable ou inconnu : {args.agenda}")
+        uid = f"{uuid.uuid4()}@foyer"
     maintenant = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     d = dt.date.fromisoformat(args.date)
     tz = fuseau()
@@ -197,7 +220,7 @@ def cmd_ajouter(args):
     if args.note:
         l.append("DESCRIPTION:" + echap(args.note))
     l += ["END:VEVENT", "END:VCALENDAR"]
-    (cible[1] / f"{uid}.ics").write_text("\r\n".join(l) + "\r\n")
+    (fichier or cible[1] / f"{uid}.ics").write_text("\r\n".join(l) + "\r\n")
     if cible[5] == "CalDAV":
         synchroniser_fond()
     print(uid)
@@ -339,7 +362,8 @@ def main():
     a = sp.add_parser("ajouter")
     a.add_argument("--date", required=True); a.add_argument("--debut", default=""); a.add_argument("--fin", default="")
     a.add_argument("--titre", required=True); a.add_argument("--lien", default=""); a.add_argument("--note", default="")
-    a.add_argument("--agenda", default="personnel"); a.set_defaults(f=cmd_ajouter)
+    a.add_argument("--agenda", default="personnel"); a.add_argument("--remplace", default="")
+    a.set_defaults(f=cmd_ajouter)
     s = sp.add_parser("supprimer"); s.add_argument("uid"); s.set_defaults(f=cmd_supprimer)
     r = sp.add_parser("rappels"); r.add_argument("--minutes", type=int, default=15); r.set_defaults(f=cmd_rappels)
     sp.add_parser("liste").set_defaults(f=cmd_liste)

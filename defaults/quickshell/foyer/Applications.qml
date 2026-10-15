@@ -3,6 +3,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 
 Item {
     id: applis
@@ -18,7 +19,59 @@ Item {
     function normaliser(t) {
         return String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
     }
+    // --- Désinstallation (clic droit sur une application) ------------------------
+    property var aRetirer: null          // entrée choisie
+    property var infoRetrait: null       // réponse de « foyer-reglages desinstaller … verifier »
+    property string etatRetrait: ""      // verif, pret, encours, fini, erreur
+    property string messageRetrait: ""
+    readonly property string reglages: Quickshell.env("HOME") + "/.local/share/foyer/bin/foyer-reglages"
+
+    function demanderRetrait(entree) {
+        aRetirer = entree;
+        infoRetrait = null;
+        etatRetrait = "verif";
+        messageRetrait = "";
+        verification.running = false;
+        verification.command = [reglages, "desinstaller", entree.id, "verifier"];
+        verification.running = true;
+    }
+    function annulerRetrait() {
+        aRetirer = null;
+        etatRetrait = "";
+    }
+    Process {
+        id: verification
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    applis.infoRetrait = JSON.parse(text);
+                    applis.etatRetrait = applis.infoRetrait.possible ? "pret" : "erreur";
+                    applis.messageRetrait = applis.infoRetrait.possible ? applis.infoRetrait.detail : applis.infoRetrait.raison;
+                } catch (e) {
+                    applis.etatRetrait = "erreur";
+                    applis.messageRetrait = "Impossible de savoir comment cette application a été installée.";
+                }
+            }
+        }
+    }
+    Process {
+        id: retrait
+        stderr: StdioCollector { id: erreurRetrait }
+        onExited: code => {
+            applis.etatRetrait = code === 0 ? "fini" : "erreur";
+            applis.messageRetrait = code === 0 ? "« " + applis.aRetirer.name + " » est désinstallée." : (erreurRetrait.text.trim() || "La désinstallation n'a pas abouti.");
+        }
+    }
+    function confirmerRetrait() {
+        etatRetrait = "encours";
+        messageRetrait = "Désinstallation en cours…";
+        retrait.running = false;
+        retrait.command = [reglages, "desinstaller", aRetirer.id];
+        retrait.running = true;
+    }
+
     function ouvrir() {
+        annulerRetrait();
         filtre.text = "";
         grille.positionViewAtBeginning();
         filtre.forceActiveFocus();
@@ -66,7 +119,7 @@ Item {
                     color: Theme.texte
                     font.family: Theme.police
                     font.pixelSize: 14
-                    Keys.onEscapePressed: applis.fermer()
+                    Keys.onEscapePressed: applis.aRetirer ? applis.annulerRetrait() : applis.fermer()
                     Keys.onReturnPressed: if (applis.liste.length > 0) applis.lancer(applis.liste[0])
                     Keys.onEnterPressed: if (applis.liste.length > 0) applis.lancer(applis.liste[0])
                 }
@@ -144,9 +197,71 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: applis.lancer(case_.modelData)
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    onClicked: mouse => {
+                        if (mouse.button === Qt.RightButton)
+                            applis.demanderRetrait(case_.modelData);
+                        else
+                            applis.lancer(case_.modelData);
+                    }
                 }
             }
+        }
+            // Bandeau de désinstallation
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 52
+            radius: 14
+            color: Qt.rgba(0, 0, 0, 0.22)
+            border.width: 1
+            border.color: applis.etatRetrait === "erreur" ? Theme.accent : Theme.trait
+            visible: applis.aRetirer !== null
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 14
+                anchors.rightMargin: 8
+                spacing: 10
+                Column {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Text {
+                        width: parent.width
+                        text: applis.aRetirer ? (applis.etatRetrait === "fini" ? "C'est fait" : "Désinstaller « " + applis.aRetirer.name + " » ?") : ""
+                        color: Theme.texte
+                        font.family: Theme.police
+                        font.pixelSize: 14
+                        font.weight: Font.DemiBold
+                        elide: Text.ElideRight
+                    }
+                    Text {
+                        width: parent.width
+                        text: applis.etatRetrait === "verif" ? "Vérification…" : applis.messageRetrait
+                        color: Theme.discret
+                        font.family: Theme.police
+                        font.pixelSize: 12
+                        elide: Text.ElideRight
+                    }
+                }
+                Bouton {
+                    texte: applis.etatRetrait === "fini" || applis.etatRetrait === "erreur" ? "Fermer" : "Annuler"
+                    actif: applis.etatRetrait !== "encours"
+                    onClic: applis.annulerRetrait()
+                }
+                Bouton {
+                    visible: applis.etatRetrait === "pret" || applis.etatRetrait === "encours"
+                    texte: "Désinstaller"
+                    plein: true
+                    actif: applis.etatRetrait === "pret"
+                    onClic: applis.confirmerRetrait()
+                }
+            }
+        }
+        Text {
+            visible: applis.aRetirer === null
+            text: "Clic droit sur une application pour la désinstaller."
+            color: Theme.discret
+            font.family: Theme.police
+            font.pixelSize: 12
         }
     }
 }

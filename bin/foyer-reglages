@@ -684,6 +684,78 @@ def cmd_appliquer(_a):
     ecrire_nuit(r)
 
 
+# --- Désinstallation d'une application (clic droit dans « Toutes les applications »)
+def fichier_desktop(ident):
+    nom = ident if ident.endswith(".desktop") else ident + ".desktop"
+    dossiers = [Path(os.environ.get("XDG_DATA_HOME", HOME / ".local/share"))]
+    dossiers += [Path(d) for d in os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share").split(":") if d]
+    for d in dossiers:
+        f = d / "applications" / nom
+        if f.exists():
+            return f
+    return None
+
+
+def paquets_proteges():
+    res = set()
+    for liste in ("base.txt", "bureau.txt", "essentiel.txt"):
+        try:
+            for ligne in (FOYER_DIR / "paquets" / liste).read_text().splitlines():
+                ligne = ligne.split("#")[0].strip()
+                if ligne:
+                    res.add(ligne)
+        except OSError:
+            pass
+    return res
+
+
+def analyse_desinstallation(ident):
+    f = fichier_desktop(ident)
+    if not f:
+        return {"possible": False, "raison": "Fichier de l'application introuvable."}
+    chemin = str(f.resolve())
+    if "/flatpak/exports/" in str(f) or "/flatpak/" in chemin:
+        appli = f.name[:-len(".desktop")]
+        return {"possible": True, "type": "flatpak", "cible": appli,
+                "detail": "Application Flatpak : ses réglages personnels sont gardés."}
+    if chemin.startswith(str(HOME)):
+        return {"possible": True, "type": "raccourci", "cible": str(f),
+                "detail": "Raccourci ajouté à la main : seul le raccourci est retiré."}
+    paquet = sortie(["pacman", "-Qqo", chemin]).strip()
+    if not paquet:
+        return {"possible": False, "raison": "Aucun paquet ne fournit cette application."}
+    if paquet in paquets_proteges():
+        return {"possible": False, "raison": f"« {paquet} » fait partie de Foyer : il serait réinstallé à la prochaine mise à jour."}
+    dependants = re.search(r"^Required By\s*:\s*(.+)$", sortie(["env", "LC_ALL=C", "pacman", "-Qi", paquet]), re.M)
+    if dependants and dependants.group(1).strip() != "None":
+        return {"possible": False, "raison": f"« {paquet} » est utilisé par : {dependants.group(1).strip()}."}
+    return {"possible": True, "type": "paquet", "cible": paquet,
+            "detail": f"Paquet « {paquet} » et ses dépendances devenues inutiles."}
+
+
+def cmd_desinstaller(a):
+    if not a.args:
+        sys.exit("Usage : desinstaller <application> [verifier]")
+    info = analyse_desinstallation(a.args[0])
+    if "verifier" in a.args[1:]:
+        print(json.dumps(info, ensure_ascii=False))
+        return
+    if not info["possible"]:
+        sys.exit(info["raison"])
+    if info["type"] == "flatpak":
+        code = lancer(["flatpak", "uninstall", "-y", "--noninteractive", info["cible"]], 300)
+    elif info["type"] == "raccourci":
+        try:
+            Path(info["cible"]).unlink()
+            code = 0
+        except OSError:
+            code = 1
+    else:
+        code = lancer(["pkexec", "pacman", "-Rns", "--noconfirm", info["cible"]], 300)
+    if code != 0:
+        sys.exit("La désinstallation n'a pas abouti (mot de passe refusé ou paquet en cours d'utilisation).")
+
+
 def main():
     import argparse
     p = argparse.ArgumentParser(prog="foyer-reglages")
@@ -699,6 +771,7 @@ def main():
         "heure": cmd_heure, "appliquer": cmd_appliquer, "avion": cmd_avion, "ecrans": cmd_ecrans, "ecran": cmd_ecran,
         "nuit": cmd_nuit, "demarrage": cmd_demarrage, "energie-etat": cmd_energie_etat, "capot": cmd_capot,
         "limite-charge": cmd_limite_charge, "instantanes": cmd_instantanes, "disposition": cmd_disposition,
+        "desinstaller": cmd_desinstaller,
     }
     if a.commande not in table:
         sys.exit("Commande inconnue : " + a.commande)

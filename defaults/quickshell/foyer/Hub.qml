@@ -1276,6 +1276,7 @@ PanelWindow {
         // ===================== Toutes les applications =====================
         Applications {
             id: vueApplications
+            objectName: "vueApplications"
             x: 28
             y: 26
             width: parent.width - 56
