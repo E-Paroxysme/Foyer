@@ -29,7 +29,10 @@ if ! hyprpm update >>"$journal" 2>&1; then
   # sinon les dernières lignes de cette tentative. (|| true : un grep sans
   # résultat ne doit pas faire échouer tout le module.)
   essai=$(tail -n +"$((debut + 1))" "$journal" || true)
-  cause=$(grep -A4 -E "CMake Error|error:|rror" <<<"$essai" | tail -8 || true)
+  # hyprpm retire la ligne « CMake Error at » et recopie la suite : la cause est
+  # juste après « cmake complained: », pas à la fin du journal.
+  cause=$(grep -A8 "cmake complained" <<<"$essai" | head -9 || true)
+  [[ -n "$cause" ]] || cause=$(grep -B2 -A4 -iE "error" <<<"$essai" | head -10 || true)
   [[ -n "$cause" ]] || cause=$(tail -8 <<<"$essai" || true)
   while IFS= read -r l; do if [[ -n "$l" ]]; then avertir "  $l"; fi; done <<<"$cause"
   avertir "hyprpm update a échoué (détails : $journal). Pas de barres de titre pour l'instant."
