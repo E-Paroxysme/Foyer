@@ -49,19 +49,14 @@ hl.bind("SUPER + CTRL + left", hl.dsp.focus({ workspace = "r-1" }))
 hl.bind("SUPER + CTRL + right", hl.dsp.focus({ workspace = "r+1" }))
 hl.bind("SUPER + mouse_down", hl.dsp.focus({ workspace = "e+1" }))
 hl.bind("SUPER + mouse_up", hl.dsp.focus({ workspace = "e-1" }))
--- Alt + Tab : fenêtre suivante du bureau actuel (Maj pour revenir en arrière).
--- Super + Tab : bureau suivant parmi ceux qui existent (Maj pour le précédent).
--- Les fenêtres réduites (bureau caché « reduites ») ne font pas partie du tour.
-local function fenetre_suivante(sens)
-	return function()
-		hl.dispatch(hl.dsp.window.cycle_next({ next = sens }))
-		hl.dispatch(hl.dsp.window.bring_to_top())
-	end
-end
-hl.bind("ALT + TAB", fenetre_suivante(true))
-hl.bind("ALT + SHIFT + TAB", fenetre_suivante(false))
+-- Alt + Tab : fenêtre suivante du bureau actuel, en boucle (après la dernière,
+-- on revient à la première). Les fenêtres réduites ne font pas partie du tour.
+-- Super + Tab : bureau suivant parmi ceux qui existent, en boucle aussi.
+hl.bind("ALT + TAB", function()
+	hl.dispatch(hl.dsp.window.cycle_next())
+	hl.dispatch(hl.dsp.window.bring_to_top())
+end)
 hl.bind("SUPER + TAB", hl.dsp.focus({ workspace = "e+1" }))
-hl.bind("SUPER + SHIFT + TAB", hl.dsp.focus({ workspace = "e-1" }))
 -- Emmener la fenêtre sur le bureau d'à côté
 hl.bind("SUPER + CTRL + SHIFT + left", hl.dsp.window.move({ workspace = "r-1" }))
 hl.bind("SUPER + CTRL + SHIFT + right", hl.dsp.window.move({ workspace = "r+1" }))
