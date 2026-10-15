@@ -54,7 +54,8 @@ otf-geist-mono-nerd     # police du terminal (Geist Mono)
 # Quickshell (hub et pastille)
 quickshell
 papirus-icon-theme
-# Compilation des extensions Hyprland (barres de titre)
+# Extensions Hyprland (barres de titre) : hyprpm est un paquet à part sur Arch
+hyprpm
 cmake
 meson
 cpio

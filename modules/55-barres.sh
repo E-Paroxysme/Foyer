@@ -6,6 +6,10 @@
 set -euo pipefail
 source "$FOYER_DIR/modules/commun.sh"
 
+# hyprpm : paquet séparé de hyprland sur Arch (depuis 0.56).
+if ! command -v hyprpm >/dev/null; then
+  pacman_installer hyprpm || true
+fi
 if ! command -v hyprpm >/dev/null; then
   avertir "hyprpm absent : pas de barres de titre."
   exit 0
