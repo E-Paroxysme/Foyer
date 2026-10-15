@@ -22,6 +22,20 @@ fi
 journal="${XDG_STATE_HOME:-$HOME/.local/state}/foyer/hyprpm.log"
 mkdir -p "$(dirname "$journal")"
 
+# hyprpm clone Hyprland (~250 Mo avec ses sous-modules, plus la compilation) dans
+# $XDG_RUNTIME_DIR, un disque en mémoire limité à 10 % de la RAM : sur un PC à
+# 2-4 Go, il se remplit et le clone s'arrête en route (sous-module udis86 vide).
+# On lui donne un dossier sur le disque, avec un lien vers le vrai dossier
+# « hypr » pour qu'il parle toujours à la session Hyprland.
+vrai_runtime="$XDG_RUNTIME_DIR"
+runtime_disque="${XDG_CACHE_HOME:-$HOME/.cache}/foyer/hyprpm-runtime"
+mkdir -p "$runtime_disque"
+chmod 700 "$runtime_disque"
+ln -sfn "$vrai_runtime/hypr" "$runtime_disque/hypr"
+[[ -e "$vrai_runtime/wayland-1" ]] && ln -sfn "$vrai_runtime/wayland-1" "$runtime_disque/wayland-1"
+hyprpm() { XDG_RUNTIME_DIR="$runtime_disque" command hyprpm "$@"; }
+echo "== $(date '+%F %T') · mémoire de session : $(df -h --output=size,avail "$vrai_runtime" | tail -1)" >>"$journal"
+
 info "Barres de titre : en-têtes d'Hyprland (première fois : quelques minutes)"
 debut=$(wc -l <"$journal" 2>/dev/null || echo 0)
 mettre_a_jour() {
@@ -32,6 +46,7 @@ mettre_a_jour() {
   if tail -n +"$((debut + 1))" "$journal" | grep -q "does not contain a CMakeLists.txt"; then
     info "Barres de titre : sources incomplètes, nouvel essai avec un cache propre"
     hyprpm purge-cache >>"$journal" 2>&1 <<<"y" || true
+    rm -rf "$runtime_disque/hyprpm"
     hyprpm update -v >>"$journal" 2>&1 && return 0
   fi
   return 1
