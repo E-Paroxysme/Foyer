@@ -26,9 +26,15 @@ mkdir -p "$(dirname "$journal")"
 # $XDG_RUNTIME_DIR, un disque en mémoire limité à 10 % de la RAM : sur un PC à
 # 2-4 Go, il se remplit et le clone s'arrête en route (sous-module udis86 vide).
 # On lui donne un dossier sur le disque, avec un lien vers le vrai dossier
-# « hypr » pour qu'il parle toujours à la session Hyprland.
+# « hypr » pour qu'il parle toujours à la session Hyprland. Chemin COURT exprès :
+# l'adresse du socket d'Hyprland (dossier + signature de ~60 caractères) ne doit
+# pas dépasser 107 caractères, sinon hyprpm ne joint plus la session.
 vrai_runtime="$XDG_RUNTIME_DIR"
-runtime_disque="${XDG_CACHE_HOME:-$HOME/.cache}/foyer/hyprpm-runtime"
+runtime_disque="/var/tmp/hpm-$(id -u)"
+rm -rf "${XDG_CACHE_HOME:-$HOME/.cache}/foyer/hyprpm-runtime"
+if [[ -e "$runtime_disque" && ! -O "$runtime_disque" ]]; then
+  runtime_disque="$HOME/.hpm"   # dossier pris par un autre compte : repli
+fi
 mkdir -p "$runtime_disque"
 chmod 700 "$runtime_disque"
 ln -sfn "$vrai_runtime/hypr" "$runtime_disque/hypr"
