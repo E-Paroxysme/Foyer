@@ -8,4 +8,10 @@ if [[ -f "$fichier" ]]; then
     [[ "$nom" =~ ^[A-Z_][A-Z0-9_]*$ ]] && export "$nom=$valeur"
   done <"$fichier"
 fi
+# Thème d'icônes : sans lui, Quickshell ne trouve pas les icônes des applications
+# (il n'y a pas de bureau GNOME/KDE pour le lui indiquer).
+if [[ -z "${QS_ICON_THEME:-}" ]]; then
+  theme="$(gsettings get org.gnome.desktop.interface icon-theme 2>/dev/null | tr -d "'")"
+  export QS_ICON_THEME="${theme:-hicolor}"
+fi
 exec qs -c foyer "$@"

@@ -33,7 +33,7 @@ Rectangle {
         // En-tête
         Item {
             Layout.fillWidth: true
-            implicitHeight: apercu.entete === "centree" ? 30 : 20
+            implicitHeight: apercu.entete === "compacte" ? 20 : 28
             Row {
                 visible: apercu.entete === "compacte"
                 anchors.bottom: parent.bottom
@@ -41,18 +41,26 @@ Rectangle {
                 Text { text: "09:41"; color: Theme.texte; font.family: Theme.police; font.pixelSize: 16; font.weight: Font.Bold }
                 Text { anchors.bottom: parent.bottom; anchors.bottomMargin: 2; text: "mercredi 14 octobre"; color: Theme.discret; font.family: Theme.police; font.pixelSize: 7 }
             }
-            Row {
+            // « Ligne » : date à gauche, heure au centre, batterie à droite (comme le vrai hub)
+            Text {
                 visible: apercu.entete === "ligne"
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 5
-                Text { text: "09:41"; color: Theme.texte; font.family: Theme.police; font.pixelSize: 9; font.weight: Font.DemiBold }
-                Text { text: "·  MER. 14 OCT."; color: Theme.discret; font.family: Theme.police; font.pixelSize: 8 }
+                anchors.left: parent.left
+                anchors.bottom: parent.bottom
+                text: "mercredi 14 oct."
+                color: Theme.discret; font.family: Theme.police; font.pixelSize: 7
+            }
+            Text {
+                visible: apercu.entete === "ligne"
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                text: "09:41"
+                color: Theme.texte; font.family: Theme.police; font.pixelSize: 18; font.weight: Font.Bold
             }
             Column {
                 visible: apercu.entete === "centree"
                 anchors.horizontalCenter: parent.horizontalCenter
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "09:41"; color: Theme.texte; font.family: Theme.police; font.pixelSize: 18; font.weight: Font.Light }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "mercredi 14 octobre"; color: Theme.discret; font.family: Theme.police; font.pixelSize: 7 }
+                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "09:41"; color: Theme.texte; font.family: Theme.police; font.pixelSize: 20; font.weight: Font.Bold }
+                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "MERCREDI 14 OCTOBRE · 82 %"; color: Theme.discret; font.family: Theme.police; font.pixelSize: 6 }
             }
             Rectangle {
                 visible: apercu.entete !== "centree"

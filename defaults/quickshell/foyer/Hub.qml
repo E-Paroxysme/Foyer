@@ -209,12 +209,14 @@ PanelWindow {
             ["applications", "Applications", "applications par defaut navigateur courriel pdf ouvrir avec demarrage automatique"],
             ["agendas", "Agendas", "agenda agendas calendrier pronote caldav ical"],
             ["systeme", "Système", "systeme mise a jour version disque stockage a propos imprimante heure date instantane instantanes btrfs sauvegarde snapper restaurer"],
-            ["compte", "Compte", "compte photo nom mot de passe utilisateur fond d'ecran avatar"]
+            ["compte", "Compte", "compte photo nom mot de passe utilisateur fond d'ecran avatar"],
+            ["personnaliser", "Personnaliser le hub", "personnaliser disposition hub en-tete egaliseur blocs"],
+            ["applications-toutes", "Toutes les applications", "toutes applications programmes logiciels liste"]
         ];
         let nbReglages = 0;
         for (const m of motsReglages) {
             if (nbReglages < 2 && (normaliser(m[1]).startsWith(q) || m[2].split(" ").some(w => q.length >= 3 && w.startsWith(q))))
-                res.push({ genre: "reglage", groupe: "Réglages", nom: m[1], detail: m[0] === "accueil" ? "Tous les réglages" : "Réglages › " + m[1], icone: "preferences-system", valeur: m[0] }), nbReglages++;
+                res.push({ genre: "reglage", groupe: "Réglages", nom: m[1], detail: m[0] === "accueil" ? "Tous les réglages" : (m[0] === "personnaliser" ? "Disposition du hub" : "Réglages › " + m[1]), icone: "", trace: vueReglages.icones[({ personnaliser: "theme", "applications-toutes": "applications" })[m[0]] || m[0]] || vueReglages.icones.systeme, valeur: m[0] }), nbReglages++;
         }
 
         const apps = [];
@@ -357,7 +359,12 @@ PanelWindow {
             lancerTuile(r.donnee);
             break;
         case "reglage":
-            ouvrirReglages(r.valeur);
+            if (r.valeur === "personnaliser")
+                ouvrirPersonnaliser();
+            else if (r.valeur === "applications-toutes")
+                ouvrirApplications();
+            else
+                ouvrirReglages(r.valeur);
             return;
         case "fenetre":
             montrerFenetre(r.donnee);
@@ -441,7 +448,9 @@ PanelWindow {
     }
 
     function echap() {
-        if (vue === "reglages")
+        if (vue === "applications")
+            vue = "accueil";
+        else if (vue === "reglages")
             vueReglages.retour();
         else if (vue === "calendrier")
             vue = "accueil";
@@ -453,7 +462,8 @@ PanelWindow {
     function chemin(icone) {
         if (!icone) return "";
         if (icone.startsWith("/")) return "file://" + icone;
-        return Quickshell.iconPath(icone, "application-x-executable");
+        // Chaîne vide si l'icône n'existe pas : la tuile affiche alors l'initiale.
+        return Quickshell.iconPath(icone, true);
     }
 
     function iconeTuile(t) {
@@ -477,6 +487,22 @@ PanelWindow {
         recherche.text = "";
         vue = "reglages";
         vueReglages.ouvrir(rubrique);
+    }
+    // « personnaliser » : la disposition du hub, en bas de Réglages › Thème
+    function ouvrirPersonnaliser() {
+        ouvrirReglages("theme");
+        Qt.callLater(() => vueReglages.versLeBas());
+        attenteBas.restart();
+    }
+    Timer {
+        id: attenteBas
+        interval: Theme.duree + 300
+        onTriggered: vueReglages.versLeBas()
+    }
+    function ouvrirApplications() {
+        recherche.text = "";
+        vue = "applications";
+        vueApplications.ouvrir();
     }
     function ouvrirCalendrier() {
         vue = "calendrier";
@@ -583,7 +609,8 @@ PanelWindow {
                 Layout.fillWidth: true
                 spacing: 4
                 Text {
-                    Layout.alignment: Qt.AlignHCenter
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
                     text: Qt.formatDateTime(hub.maintenant, "HH") + "<font color='" + Theme.accent + "'>:</font>" + Qt.formatDateTime(hub.maintenant, "mm")
                     textFormat: Text.StyledText
                     color: Theme.texte
@@ -730,9 +757,16 @@ PanelWindow {
                                             text: res.modelData.icone
                                             font.pixelSize: 20
                                         }
+                                        Icone {
+                                            anchors.centerIn: parent
+                                            visible: !!res.modelData.trace
+                                            trace: res.modelData.trace || ""
+                                            taille: 22
+                                            couleur: Theme.accentClair
+                                        }
                                         Image {
                                             anchors.fill: parent
-                                            visible: res.modelData.genre !== "calcul" && res.modelData.genre !== "web" && !hub.estGlyphe(res.modelData.icone)
+                                            visible: !res.modelData.trace && res.modelData.genre !== "calcul" && res.modelData.genre !== "web" && !hub.estGlyphe(res.modelData.icone)
                                             source: visible ? hub.chemin(res.modelData.icone) : ""
                                             sourceSize.width: 26
                                             sourceSize.height: 26
@@ -819,11 +853,26 @@ PanelWindow {
                                         font.pixelSize: 30
                                     }
                                     Image {
+                                        id: imageTuile
                                         anchors.fill: parent
                                         visible: !hub.estGlyphe(tuile.icone)
                                         source: visible ? hub.chemin(tuile.icone) : ""
                                         sourceSize.width: 44
                                         sourceSize.height: 44
+                                    }
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        visible: !hub.estGlyphe(tuile.icone) && imageTuile.status !== Image.Ready
+                                        radius: 12
+                                        color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18)
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: (tuile.modelData.nom || "?").charAt(0).toUpperCase()
+                                            color: Theme.accentClair
+                                            font.family: Theme.police
+                                            font.pixelSize: 20
+                                            font.weight: Font.Bold
+                                        }
                                     }
                                 }
                                 Text {
@@ -963,6 +1012,25 @@ PanelWindow {
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+
+                // Raccourcis : toutes les applications, nouveau bureau
+                RowLayout {
+                    visible: !hub.enRecherche
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Bouton {
+                        texte: "Toutes les applications"
+                        onClic: hub.ouvrirApplications()
+                    }
+                    Item { Layout.fillWidth: true }
+                    Bouton {
+                        texte: "+ Nouveau bureau"
+                        onClic: {
+                            hub.executer(["hyprctl", "dispatch", "hl.dsp.focus({ workspace = \"empty\" })"]);
+                            hub.ouvert = false;
                         }
                     }
                 }
@@ -1164,6 +1232,29 @@ PanelWindow {
                 NumberAnimation { duration: Theme.duree }
             }
             onFermer: hub.echap()
+        }
+
+        // ===================== Toutes les applications =====================
+        Applications {
+            id: vueApplications
+            x: 28
+            y: 26
+            width: parent.width - 56
+            height: hub.hauteurAccueil
+            actif: hub.vue === "applications" && hub.ouvert
+            opacity: hub.vue === "applications" ? 1 : 0
+            visible: opacity > 0
+            Behavior on opacity {
+                NumberAnimation { duration: Theme.duree }
+            }
+            onLancer: e => {
+                hub.lancerEntree(e);
+                hub.ouvert = false;
+            }
+            onFermer: {
+                hub.vue = "accueil";
+                recherche.forceActiveFocus();
+            }
         }
 
         // ===================== Vue réglages =====================
