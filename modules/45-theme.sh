@@ -55,6 +55,14 @@ nom="$(jq -r '.compte.nom // ""' "$FOYER_CONFIG/foyer/reglages.json" 2>/dev/null
 [[ -n "$nom" ]] || nom="$(getent passwd "$utilisateur" | cut -d: -f5 | cut -d, -f1)"
 printf 'verrou.nom\t%s\nverrou.image\t%s\n' "${nom:-$utilisateur}" "$cache/verrou.png" >>"$valeurs"
 
+# Barre de titre du terminal : celle de hyprbars quand l'extension est active
+# (repère posé par le module barres), sinon celle de foot.
+if [[ -f "${XDG_STATE_HOME:-$HOME/.local/state}/foyer/barres-actives" ]]; then
+  printf 'fenetres.decorationsTerminal\tserver\n' >>"$valeurs"
+else
+  printf 'fenetres.decorationsTerminal\tclient\n' >>"$valeurs"
+fi
+
 # --- Icônes des dossiers aux couleurs du thème --------------------------------
 # Petit thème d'icônes « Foyer » dans ~/.local/share/icons : il ne contient que
 # les dossiers (pris dans Papirus, dans la couleur du thème) et laisse tout le

@@ -76,6 +76,17 @@ if [[ ! -f "$FOYER_CONFIG/foyer/tuiles.json" ]]; then
 fi
 
 
+# LibreWolf : barre de titre du système (boutons Foyer, réduire compris) au lieu
+# de ses boutons dans la barre d'onglets, que Hyprland grise. Ligne ajoutée une
+# fois dans le fichier de réglages personnels de LibreWolf, sans toucher au reste.
+for dossier in "$HOME/.librewolf" "$HOME/.var/app/io.gitlab.librewolf-community/.librewolf"; do
+  [[ "$dossier" == "$HOME/.librewolf" ]] || [[ -d "$(dirname "$dossier")" ]] || continue
+  mkdir -p "$dossier"
+  f="$dossier/librewolf.overrides.cfg"
+  grep -q 'browser.tabs.inTitlebar' "$f" 2>/dev/null \
+    || printf '// Foyer : barre de titre du système (boutons réduire, agrandir, fermer).\ndefaultPref("browser.tabs.inTitlebar", 0);\n' >>"$f"
+done
+
 # Fond d'écran : copié une seule fois, remplace ~/.config/foyer/fond.jpg par le tien.
 if [[ ! -f "$FOYER_CONFIG/foyer/fond.jpg" ]]; then
   deposer "$D/fonds/braise.jpg" "$FOYER_CONFIG/foyer/fond.jpg"

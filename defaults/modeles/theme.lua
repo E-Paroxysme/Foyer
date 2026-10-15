@@ -77,7 +77,7 @@ if hl.plugin and hl.plugin.hyprbars then
 	-- Pas de seconde barre pour les applis qui dessinent déjà la leur.
 	pcall(hl.window_rule, {
 		name = "foyer-sans-barre",
-		match = { class = "^(org\\.gnome\\..*|librewolf|LibreWolf|firefox|io\\.gitlab\\.librewolf-community|com\\.mitchellh\\.ghostty)$" },
+		match = { class = "^(org\\.gnome\\..*|com\\.mitchellh\\.ghostty)$" },
 		["hyprbars:no_bar"] = true,
 	})
 	pcall(hl.window_rule, {

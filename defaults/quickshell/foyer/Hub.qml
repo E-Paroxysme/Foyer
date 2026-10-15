@@ -1026,8 +1026,47 @@ PanelWindow {
                         onClic: hub.ouvrirApplications()
                     }
                     Item { Layout.fillWidth: true }
+                    // Bureaux : un clic y va ; « + » en ouvre un nouveau.
+                    Text {
+                        text: "Bureaux"
+                        color: Theme.discret
+                        font.family: Theme.police
+                        font.pixelSize: 12
+                    }
+                    Repeater {
+                        model: (Hyprland.workspaces ? Hyprland.workspaces.values : []).filter(w => w.id > 0).sort((a, b) => a.id - b.id)
+                        delegate: Rectangle {
+                            required property var modelData
+                            readonly property bool actuel: Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id === modelData.id
+                            implicitWidth: 32
+                            implicitHeight: 32
+                            radius: 16
+                            color: actuel ? Theme.accent : (zoneBureau.containsMouse ? Theme.carteChoisie : Theme.carte)
+                            border.width: 1
+                            border.color: Theme.trait
+                            Text {
+                                anchors.centerIn: parent
+                                text: parent.modelData.id
+                                color: parent.actuel ? Theme.surAccent : Theme.texte
+                                font.family: Theme.police
+                                font.pixelSize: 13
+                                font.weight: Font.DemiBold
+                            }
+                            MouseArea {
+                                id: zoneBureau
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    hub.executer(["hyprctl", "dispatch", "hl.dsp.focus({ workspace = " + parent.modelData.id + " })"]);
+                                    hub.ouvert = false;
+                                }
+                            }
+                        }
+                    }
                     Bouton {
-                        texte: "+ Nouveau bureau"
+                        glyphe: "+"
+                        rond: true
                         onClic: {
                             hub.executer(["hyprctl", "dispatch", "hl.dsp.focus({ workspace = \"empty\" })"]);
                             hub.ouvert = false;

@@ -44,6 +44,15 @@ for i, touche in ipairs(touches) do
 	hl.bind("SUPER + SHIFT + " .. touche, hl.dsp.window.move({ workspace = i }))
 end
 
+-- Bureau précédent / suivant (Super + Ctrl + flèches, ou Super + molette)
+hl.bind("SUPER + CTRL + left", hl.dsp.focus({ workspace = "r-1" }))
+hl.bind("SUPER + CTRL + right", hl.dsp.focus({ workspace = "r+1" }))
+hl.bind("SUPER + mouse_down", hl.dsp.focus({ workspace = "e+1" }))
+hl.bind("SUPER + mouse_up", hl.dsp.focus({ workspace = "e-1" }))
+-- Emmener la fenêtre sur le bureau d'à côté
+hl.bind("SUPER + CTRL + SHIFT + left", hl.dsp.window.move({ workspace = "r-1" }))
+hl.bind("SUPER + CTRL + SHIFT + right", hl.dsp.window.move({ workspace = "r+1" }))
+
 -- Touches multimédia
 hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("pamixer -i 5"))
 hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("pamixer -d 5"))

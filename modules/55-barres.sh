@@ -34,8 +34,17 @@ if ! hyprpm list 2>/dev/null | grep -q hyprbars; then
   fi
 fi
 
-hyprpm enable hyprbars >>"$journal" 2>&1 || { avertir "Activation de hyprbars impossible (détails : $journal)."; exit 0; }
+repere="${XDG_STATE_HOME:-$HOME/.local/state}/foyer/barres-actives"
+hyprpm enable hyprbars >>"$journal" 2>&1 || { rm -f "$repere"; avertir "Activation de hyprbars impossible (détails : $journal)."; exit 0; }
 hyprpm reload >>"$journal" 2>&1 || avertir "Rechargement des extensions impossible (détails : $journal)."
+if hyprctl plugin list 2>/dev/null | grep -qi hyprbars; then
+  touch "$repere"
+else
+  rm -f "$repere"
+  avertir "hyprbars compilé mais pas chargé par Hyprland (détails : $journal, et « hyprctl plugin list »)."
+fi
+# Le terminal prend la barre de hyprbars (ou garde la sienne si l'extension manque).
+bash "$FOYER_DIR/modules/45-theme.sh" >/dev/null 2>&1 || true
 # La config relit theme.lua : les barres prennent les couleurs du thème.
 hyprctl reload >/dev/null 2>&1 || true
 info "Barres de titre actives"
