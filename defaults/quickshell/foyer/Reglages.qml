@@ -32,6 +32,7 @@ Item {
     property var energieEtat: ({ capot: "veille", limiteDisponible: false, limite: null })
     property var demarrage: []
     property var instantanes: ({ disponible: false, liste: [] })
+    property var stockage: null
     property string saisieWifi: ""        // réseau dont on tape le mot de passe
     property string message: ""
     property bool versLaDroite: true
@@ -87,7 +88,7 @@ Item {
         if (p === "ecrans") { lireLum(); lireEcrans(); }
         if (p === "energie") lireEnergie();
         if (p === "applications") lireDemarrage();
-        if (p === "systeme") lireInstantanes();
+        if (p === "systeme") { lireInstantanes(); lireStockage(); }
         if (p === "agendas") lireAgendas();
     }
     // Fait défiler la rubrique jusqu'en bas (clavier : Fin).
@@ -121,6 +122,7 @@ Item {
     function lireEnergie() { pEnergie.running = false; pEnergie.running = true; }
     function lireDemarrage() { pDemarrage.running = false; pDemarrage.running = true; }
     function lireInstantanes() { pInstantanes.running = false; pInstantanes.running = true; }
+    function lireStockage() { pStockage.running = false; pStockage.running = true; }
     function lireAgendas() {
         const d = new Date();
         pAgendas.running = false;
@@ -148,6 +150,7 @@ Item {
     Process { id: pEnergie; command: [reglages.outil, "energie-etat"]; stdout: StdioCollector { onStreamFinished: reglages.energieEtat = reglages.json(text, reglages.energieEtat) } }
     Process { id: pDemarrage; command: [reglages.outil, "demarrage"]; stdout: StdioCollector { onStreamFinished: reglages.demarrage = reglages.json(text, []) } }
     Process { id: pInstantanes; command: [reglages.outil, "instantanes"]; stdout: StdioCollector { onStreamFinished: reglages.instantanes = reglages.json(text, reglages.instantanes) } }
+    Process { id: pStockage; command: [reglages.outil, "stockage"]; stdout: StdioCollector { onStreamFinished: reglages.stockage = reglages.json(text, reglages.stockage) } }
     Process { id: pAgendas; stdout: StdioCollector { onStreamFinished: reglages.agendas = (reglages.json(text, {}).agendas || []) } }
     Timer {
         interval: 10000
@@ -1066,6 +1069,15 @@ Item {
             spacing: 12
             Carte {
                 Layout.fillWidth: true
+                LigneInter {
+                    titre: "Rester éveillé"
+                    aide: reglages.pastille && reglages.pastille.presentation ? "Déjà bloqué : mode présentation (écran externe branché)" : "Bloque la veille et l'extinction de l'écran jusqu'à ce que tu le coupes"
+                    actif: !!(reglages.pastille && reglages.pastille.eveille)
+                    onBascule: v => { if (reglages.pastille) reglages.pastille.eveille = v; }
+                }
+            }
+            Carte {
+                Layout.fillWidth: true
                 LigneSegments {
                     titre: "Éteindre l'écran après"
                     choix: [{ nom: "2 min", valeur: 120 }, { nom: "5 min", valeur: 300 }, { nom: "10 min", valeur: 600 }, { nom: "Jamais", valeur: 0 }]
@@ -1738,13 +1750,17 @@ Item {
                         Text { text: "Mises à jour avec instantané Btrfs avant chaque changement"; color: Theme.discret; font.family: Theme.police; font.pixelSize: 12 }
                     }
                     Bouton { texte: "Version précédente"; onClic: reglages.terminal("Foyer", ["foyer", "rollback"]) }
-                    Bouton { texte: "Mettre à jour"; plein: true; onClic: reglages.terminal("Foyer", ["foyer", "update"]) }
+                    Bouton {
+                        texte: reglages.pastille && reglages.pastille.majDispo > 0 ? "Mettre à jour (" + reglages.pastille.majDispo + ")" : "Mettre à jour"
+                        plein: true
+                        onClic: { if (reglages.pastille) reglages.pastille.mettreAJour(); reglages.fermer(); }
+                    }
                 }
             }
             Carte {
                 id: carteDisque
                 Layout.fillWidth: true
-                readonly property var d: reglages.etat.disque || { utilise: 0, total: 1 }
+                readonly property var d: reglages.stockage || reglages.etat.disque || { utilise: 0, total: 1 }
                 RowLayout {
                     Layout.fillWidth: true
                     Text { text: "Espace disque"; color: Theme.texte; font.family: Theme.police; font.pixelSize: 14; Layout.fillWidth: true }
@@ -1756,6 +1772,71 @@ Item {
                     radius: 4
                     color: Qt.rgba(1, 1, 1, 0.12)
                     Rectangle { width: parent.width * Math.min(1, carteDisque.d.utilise / Math.max(1, carteDisque.d.total)); height: 8; radius: 4; color: Theme.accent }
+                }
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: 6
+                    visible: !!reglages.stockage
+                    Repeater {
+                        model: reglages.stockage ? reglages.stockage.dossiers.filter(x => x.taille > 50e6).slice(0, 5).concat(reglages.stockage.caches > 100e6 ? [{ nom: "Caches", taille: reglages.stockage.caches }] : []) : []
+                        delegate: Rectangle {
+                            required property var modelData
+                            implicitWidth: texteDossier.implicitWidth + 18
+                            implicitHeight: 24
+                            radius: 12
+                            color: Qt.rgba(1, 1, 1, 0.07)
+                            Text {
+                                id: texteDossier
+                                anchors.centerIn: parent
+                                text: parent.modelData.nom + " · " + reglages.octets(parent.modelData.taille)
+                                color: Theme.texte; font.family: Theme.police; font.pixelSize: 12
+                            }
+                        }
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Text {
+                        Layout.fillWidth: true
+                        text: reglages.stockage ? reglages.octets(reglages.stockage.libre) + " libres" : ""
+                        color: reglages.stockage && reglages.stockage.libre < 6e9 ? Theme.accent : Theme.discret
+                        font.family: Theme.police; font.pixelSize: 12
+                    }
+                    Bouton {
+                        texte: "Libérer de la place"
+                        onClic: reglages.agir(["nettoyer"], () => { reglages.message = "Caches vidés."; reglages.lireStockage(); }, () => reglages.message = "Nettoyage interrompu.")
+                    }
+                    Bouton {
+                        texte: "Analyser"
+                        onClic: { Quickshell.execDetached(["uwsm", "app", "--", "baobab"]); reglages.fermer(); }
+                    }
+                }
+            }
+            Etiquette { texte: "Sauvegarde et téléphone"; Layout.topMargin: 6 }
+            Carte {
+                Layout.fillWidth: true
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        Text { text: "Sauvegarde de tes fichiers"; color: Theme.texte; font.family: Theme.police; font.pixelSize: 14 }
+                        Text { Layout.fillWidth: true; text: "Sur une clé ou un disque USB, chiffrée, automatique (Déjà Dup). Les instantanés ne protègent pas d'une panne du disque."; color: Theme.discret; font.family: Theme.police; font.pixelSize: 12; wrapMode: Text.Wrap }
+                    }
+                    Bouton { texte: "Ouvrir"; onClic: { Quickshell.execDetached(["uwsm", "app", "--", "deja-dup"]); reglages.fermer(); } }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 10
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 2
+                        Text { text: "Téléphone (KDE Connect)"; color: Theme.texte; font.family: Theme.police; font.pixelSize: 14 }
+                        Text { Layout.fillWidth: true; text: "Fichiers, notifications et presse-papiers avec ton Android (appli KDE Connect), sur le même Wi-Fi."; color: Theme.discret; font.family: Theme.police; font.pixelSize: 12; wrapMode: Text.Wrap }
+                    }
+                    Bouton { texte: "Associer"; onClic: { Quickshell.execDetached(["uwsm", "app", "--", "kdeconnect-app"]); reglages.fermer(); } }
                 }
             }
             Carte {

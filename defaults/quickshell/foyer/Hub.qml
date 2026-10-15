@@ -13,6 +13,7 @@ import Quickshell.Wayland
 import Quickshell.Hyprland
 import Quickshell.Services.UPower
 import Quickshell.Services.Mpris
+import "Caracteres.js" as Caracteres
 
 PanelWindow {
     id: hub
@@ -188,6 +189,12 @@ PanelWindow {
         if (q.length === 0)
             return [];
         const res = [];
+        // « : » en tête : emojis et caractères spéciaux seulement.
+        if (brut.startsWith(":")) {
+            for (const c of Caracteres.chercher(normaliser(brut.slice(1)).trim(), normaliser, true, 24))
+                res.push({ genre: "caractere", groupe: "Emojis et caractères · Entrée pour insérer", nom: c.nom, detail: "", icone: c.car, valeur: c.car });
+            return res;
+        }
         const calcul = calculer(brut);
         if (calcul !== null)
             res.push({ genre: "calcul", groupe: "Calcul", nom: brut.replace(/\*/g, " × ") + " = " + String(calcul).replace(".", ","), detail: "Entrée pour copier", icone: "", valeur: String(calcul) });
@@ -217,6 +224,26 @@ PanelWindow {
         for (const m of motsReglages) {
             if (nbReglages < 2 && (normaliser(m[1]).startsWith(q) || m[2].split(" ").some(w => q.length >= 3 && w.startsWith(q))))
                 res.push({ genre: "reglage", groupe: "Réglages", nom: m[1], detail: m[0] === "accueil" ? "Tous les réglages" : (m[0] === "personnaliser" ? "Disposition du hub" : "Réglages › " + m[1]), icone: "", trace: vueReglages.icones[({ personnaliser: "theme", "applications-toutes": "applications" })[m[0]] || m[0]] || vueReglages.icones.systeme, valeur: m[0] }), nbReglages++;
+        }
+
+        // Actions rapides : rester éveillé, enregistrer l'écran, projecteur, mise à jour…
+        const p = hub.pastille;
+        const actions = [
+            ["eveille", p && p.eveille ? "Ne plus rester éveillé" : "Rester éveillé", "☕", "rester eveille veille caffeine empecher ecran allume reveil", p && p.eveille ? "Actif : la veille est bloquée" : "Bloque la mise en veille"],
+            ["enregistrer", p && p.enregistre ? "Arrêter l'enregistrement" : "Enregistrer l'écran", "⏺", "enregistrer enregistrement video ecran filmer capture tutoriel", "Super + Alt + R"],
+            ["enregistrer-zone", "Enregistrer une zone de l'écran", "⬚", "enregistrer enregistrement video zone partie filmer", "Super + Alt + Maj + R"],
+            ["projection", "Affichage du projecteur", "⧉", "projecteur videoprojecteur dupliquer etendre recopie affichage presentation second ecran", "Super + P"],
+            ["maj", p && p.majDispo > 0 ? "Mettre à jour (" + p.majDispo + ")" : "Mettre à jour", "⟳", "mise a jour mettre a jour maj update upgrade", "Lance « foyer update » dans un terminal"],
+            ["caracteres", "Emojis et caractères spéciaux", "☺", "emoji emojis smiley caractere caracteres speciaux symbole accent majuscule", "Super + ; ou « : » dans la recherche"]
+        ];
+        for (const a of actions) {
+            if (normaliser(a[1]).startsWith(q) || a[3].split(" ").some(w => q.length >= 3 && w.startsWith(q)))
+                res.push({ genre: "action", groupe: "Actions", nom: a[1], detail: a[4], icone: a[2], valeur: a[0] });
+        }
+        // Caractères spéciaux sur un mot exact ou presque (« oe », « euro », « guillemets »)
+        if (q.length >= 2 && res.length < 6) {
+            for (const c of Caracteres.chercher(q, normaliser, false, 3))
+                res.push({ genre: "caractere", groupe: "Caractères", nom: c.nom, detail: "Entrée pour insérer", icone: c.car, valeur: c.car });
         }
 
         const apps = [];
@@ -369,6 +396,27 @@ PanelWindow {
         case "fenetre":
             montrerFenetre(r.donnee);
             break;
+        case "caractere":
+            // Copié, puis tapé dans la fenêtre d'avant une fois le hub fermé.
+            executer(["sh", "-c", 'printf %s "$1" | wl-copy; sleep 0.3; command -v wtype >/dev/null && wtype -- "$1"', "_", r.valeur]);
+            break;
+        case "action":
+            if (r.valeur === "caracteres") {
+                ouvrirCaracteres();
+                return;
+            }
+            if (r.valeur === "stockage") {
+                ouvrirReglages("systeme");
+                return;
+            }
+            if (hub.pastille) {
+                if (r.valeur === "eveille") hub.pastille.eveille = !hub.pastille.eveille;
+                else if (r.valeur === "enregistrer") Qt.callLater(() => hub.pastille.enregistrer(false));
+                else if (r.valeur === "enregistrer-zone") Qt.callLater(() => hub.pastille.enregistrer(true));
+                else if (r.valeur === "projection") Qt.callLater(() => hub.pastille.projection());
+                else if (r.valeur === "maj") hub.pastille.mettreAJour();
+            }
+            break;
         case "fichier":
         case "web":
             executer(["xdg-open", r.valeur]);
@@ -498,6 +546,12 @@ PanelWindow {
         id: attenteBas
         interval: Theme.duree + 300
         onTriggered: vueReglages.versLeBas()
+    }
+    function ouvrirCaracteres() {
+        vue = "accueil";
+        recherche.text = ":";
+        recherche.cursorPosition = 1;
+        recherche.forceActiveFocus();
     }
     function ouvrirApplications() {
         recherche.text = "";

@@ -102,6 +102,18 @@ lance tout seul après la connexion.
 | Super + & é " ' … | Aller au bureau 1, 2, 3… |
 | Super + Maj + & é " ' … | Envoyer la fenêtre au bureau 1, 2, 3… |
 | Impr. écran / Super + Maj + S | Capture plein écran / d'une zone |
+| Alt + Tab / Super + Tab | Fenêtre suivante du bureau / bureau suivant (en boucle) |
+| Super + P | Vidéoprojecteur : écran du PC, dupliquer, étendre, projecteur seul (rappuyer pour changer) |
+| Super + Alt + R / + Maj | Enregistrer l'écran / une zone (Vidéos/Enregistrements) ; même raccourci pour arrêter |
+| Super + ; ou « : » dans le hub | Emojis et caractères spéciaux (œ, É, « », ², Ω…) |
+
+Écran externe branché : **mode présentation** automatique (notifications coupées,
+pas de mise en veille ; clic sur le témoin « Présentation » pour l'annuler).
+Dans le hub : « rester éveillé », « mise à jour », « enregistrer »… Les mises à
+jour disponibles sont signalées par une notification (vérification toutes les 3 h).
+Réglages › Système : stockage (« Libérer de la place »), sauvegarde sur USB
+(Déjà Dup) et liaison avec le téléphone (KDE Connect, réseaux locaux seulement).
+Toutes les applications : clic droit pour désinstaller.
 
 ## Mettre à jour
 

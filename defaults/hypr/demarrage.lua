@@ -11,6 +11,8 @@ hl.on("hyprland.start", function()
 	-- Éclairage nocturne (horaires réglés dans le hub : ~/.config/hypr/hyprsunset.conf)
 	hl.exec_cmd("uwsm app -s b -- hyprsunset")
 	hl.exec_cmd("uwsm app -s b -- udiskie --no-tray")
+	-- KDE Connect (liaison avec le téléphone) : démon en arrière-plan s'il est installé
+	hl.exec_cmd("sh -c 'd=/usr/lib/kdeconnectd; [ -x \"$d\" ] || d=$(command -v kdeconnectd) || exit 0; exec uwsm app -s b -- \"$d\"'")
 	hl.exec_cmd("systemctl --user start hyprpolkitagent")
 	-- Thème des applications GTK (police, accent, curseur, boutons des fenêtres)
 	hl.exec_cmd("sh " .. os.getenv("HOME") .. "/.config/foyer/session-theme.sh")

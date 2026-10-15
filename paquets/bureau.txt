@@ -70,3 +70,10 @@ cpio
 khal
 vdirsyncer
 libnotify
+# Outils du quotidien (hub) : enregistrement de l'écran, saisie des emojis,
+# analyse du disque, sauvegarde sur USB, liaison avec le téléphone.
+wf-recorder
+wtype
+baobab
+deja-dup
+kdeconnect

@@ -101,6 +101,13 @@ ShellRoot {
                 racine.hub.ouvrirReglages(rubrique);
             }
         }
+        // Super+. : emojis et caractères spéciaux
+        function caracteres(): void {
+            if (racine.hub && racine.hub.ouvrirCaracteres) {
+                racine.hub.ouvert = true;
+                racine.hub.ouvrirCaracteres();
+            }
+        }
         // qs -c foyer ipc call hub personnaliser
         function personnaliser(): void {
             if (racine.hub && racine.hub.ouvrirPersonnaliser) {
@@ -120,6 +127,24 @@ ShellRoot {
         function historique(): void {
             if (racine.pastille)
                 racine.pastille.basculerHistorique();
+        }
+        // Super+P : écran du PC, dupliquer, étendre, projecteur seul
+        function projection(): void {
+            if (racine.pastille)
+                racine.pastille.projection();
+        }
+        // Super+Alt+R (écran entier) ou Super+Alt+Maj+R (zone) ; rappuyer arrête.
+        function enregistrer(): void {
+            if (racine.pastille)
+                racine.pastille.enregistrer(false);
+        }
+        function enregistrerZone(): void {
+            if (racine.pastille)
+                racine.pastille.enregistrer(true);
+        }
+        function eveille(): void {
+            if (racine.pastille)
+                racine.pastille.eveille = !racine.pastille.eveille;
         }
     }
 }

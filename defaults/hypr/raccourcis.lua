@@ -21,6 +21,16 @@ hl.bind("SUPER + F", hl.dsp.window.float({ action = "toggle" }))
 hl.bind("SUPER + L", hl.dsp.exec_cmd("loginctl lock-session"))
 hl.bind("SUPER + V", hl.dsp.exec_cmd("cliphist list | fuzzel --dmenu | cliphist decode | wl-copy"))
 
+-- Super + P : choix d'affichage pour le vidéoprojecteur (rappuyer pour changer)
+hl.bind("SUPER + P", hl.dsp.exec_cmd("qs -c foyer ipc call pastille projection"))
+-- Enregistrement de l'écran (dans Vidéos/Enregistrements) : Super + Alt + R pour
+-- l'écran entier, Super + Alt + Maj + R pour une zone ; le même raccourci arrête.
+hl.bind("SUPER + ALT + R", hl.dsp.exec_cmd("qs -c foyer ipc call pastille enregistrer"))
+hl.bind("SUPER + ALT + SHIFT + R", hl.dsp.exec_cmd("qs -c foyer ipc call pastille enregistrerZone"))
+-- Super + . : emojis et caractères spéciaux (ouvre le hub en mode « : »)
+hl.bind("SUPER + period", hl.dsp.exec_cmd("qs -c foyer ipc call hub caracteres"))
+hl.bind("SUPER + semicolon", hl.dsp.exec_cmd("qs -c foyer ipc call hub caracteres"))
+
 -- Captures d'écran (dans le dossier Images)
 hl.bind("Print", hl.dsp.exec_cmd("sh -c 'grim \"$(xdg-user-dir PICTURES)/capture-$(date +%F-%H%M%S).png\"'"))
 hl.bind("SUPER + SHIFT + S", hl.dsp.exec_cmd("sh -c 'grim -g \"$(slurp)\" - | wl-copy'"))

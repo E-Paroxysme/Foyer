@@ -756,6 +756,114 @@ def cmd_desinstaller(a):
         sys.exit("La désinstallation n'a pas abouti (mot de passe refusé ou paquet en cours d'utilisation).")
 
 
+# --- Projection (Super+P) : écran du PC, dupliquer, étendre, projecteur seul ------------
+def moniteurs():
+    try:
+        return json.loads(sortie(["hyprctl", "monitors", "all", "-j"]) or "[]")
+    except ValueError:
+        return []
+
+
+def est_interne(nom):
+    return nom.startswith(("eDP", "LVDS", "DSI"))
+
+
+def cmd_projection(a):
+    mode = a.args[0] if a.args else "etat"
+    ms = moniteurs()
+    internes = [m["name"] for m in ms if est_interne(m.get("name", ""))]
+    externes = [m["name"] for m in ms if not est_interne(m.get("name", ""))]
+    r = lire()
+    ec = r["ecrans"]
+    if mode == "etat":
+        actuel = "interne"
+        for m in ms:
+            if m["name"] in externes and not m.get("disabled"):
+                actuel = "dupliquer" if m.get("mirrorOf", "none") not in ("none", "") else "etendre"
+        if internes and all(m.get("disabled") for m in ms if m["name"] in internes) and externes:
+            actuel = "externe"
+        print(json.dumps({"mode": actuel, "externes": len(externes), "internes": len(internes)}))
+        return
+    if mode == "retour":
+        # Écran externe débranché : on rallume l'écran du PC s'il était éteint, et on
+        # oublie la recopie (sinon un futur branchement repartirait en noir).
+        change = False
+        for nom in internes:
+            if ec.get(nom, {}).get("actif") is False:
+                ec[nom].pop("actif", None)
+                change = True
+        if change:
+            ecrire(r)
+            if ecrire_entrees(r):
+                lancer(["hyprctl", "reload"])
+        return
+    if not externes:
+        sys.exit("Aucun écran externe branché.")
+    interne = internes[0] if internes else ""
+    for nom in internes:
+        ec.setdefault(nom, {}).pop("actif", None)
+    for nom in externes:
+        m = ec.setdefault(nom, {})
+        m.pop("recopie", None)
+        m.pop("actif", None)
+        if mode == "interne":
+            m["actif"] = False
+        elif mode == "dupliquer" and interne:
+            m["recopie"] = interne
+        elif mode == "etendre":
+            m.setdefault("position", "auto-right")
+    if mode == "externe":
+        for nom in internes:
+            ec[nom]["actif"] = False
+    ecrire(r)
+    ecrire_entrees(r)
+    lancer(["hyprctl", "reload"])
+
+
+# --- Mises à jour disponibles (vérifiées par la pastille toutes les 3 heures) -------
+def cmd_maj_dispo(_a):
+    pac = sortie(["checkupdates", "--nocolor"], 120)
+    nb_pac = len([l for l in pac.splitlines() if l.strip()])
+    nb_aur = 0
+    if shutil.which("yay"):
+        nb_aur = len([l for l in sortie(["yay", "-Qua"], 120).splitlines() if l.strip()])
+    nb_flat = 0
+    if shutil.which("flatpak"):
+        lignes = sortie(["flatpak", "remote-ls", "--updates", "--columns=application"], 120).splitlines()
+        nb_flat = len([l for l in lignes if l.strip() and l.strip() != "Application ID"])
+    print(json.dumps({"total": nb_pac + nb_aur + nb_flat, "paquets": nb_pac, "aur": nb_aur, "flatpak": nb_flat}))
+
+
+# --- Stockage ------------------------------------------------------------------------
+def cmd_stockage(_a):
+    st = shutil.disk_usage("/")
+    res = {"total": st.total, "utilise": st.total - st.free, "libre": st.free, "dossiers": []}
+    for nom in ("Téléchargements", "Documents", "Images", "Vidéos", "Musique", "Bureau"):
+        d = HOME / nom
+        if d.is_dir():
+            taille = sortie(["du", "-sb", str(d)], 15).split("\t")[0].strip()
+            if taille.isdigit():
+                res["dossiers"].append({"nom": nom, "taille": int(taille)})
+    caches = [HOME / ".cache", Path("/var/cache/pacman/pkg")]
+    total_cache = 0
+    for c in caches:
+        t = sortie(["du", "-sb", str(c)], 15).split("\t")[0].strip()
+        total_cache += int(t) if t.isdigit() else 0
+    res["caches"] = total_cache
+    res["dossiers"].sort(key=lambda x: -x["taille"])
+    print(json.dumps(res, ensure_ascii=False))
+
+
+def cmd_nettoyer(_a):
+    """Vide les caches qui se reconstruisent seuls (miniatures, paquets téléchargés)."""
+    shutil.rmtree(HOME / ".cache/thumbnails", ignore_errors=True)
+    code = lancer(["pkexec", "paccache", "-qrk1"], 120)
+    lancer(["pkexec", "paccache", "-qruk0"], 120) if code == 0 else None
+    if shutil.which("flatpak"):
+        lancer(["flatpak", "uninstall", "--unused", "-y", "--noninteractive"], 300)
+    sys.exit(0 if code == 0 else 1)
+
+
 def main():
     import argparse
     p = argparse.ArgumentParser(prog="foyer-reglages")
@@ -771,7 +879,8 @@ def main():
         "heure": cmd_heure, "appliquer": cmd_appliquer, "avion": cmd_avion, "ecrans": cmd_ecrans, "ecran": cmd_ecran,
         "nuit": cmd_nuit, "demarrage": cmd_demarrage, "energie-etat": cmd_energie_etat, "capot": cmd_capot,
         "limite-charge": cmd_limite_charge, "instantanes": cmd_instantanes, "disposition": cmd_disposition,
-        "desinstaller": cmd_desinstaller,
+        "desinstaller": cmd_desinstaller, "projection": cmd_projection, "maj-dispo": cmd_maj_dispo,
+        "stockage": cmd_stockage, "nettoyer": cmd_nettoyer,
     }
     if a.commande not in table:
         sys.exit("Commande inconnue : " + a.commande)

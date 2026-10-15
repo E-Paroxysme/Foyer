@@ -24,6 +24,7 @@ PanelWindow {
     property var arrivees: ({})
     property bool serveurPret: false
     property bool osdPret: false
+    readonly property string reglages: Quickshell.env("HOME") + "/.local/share/foyer/bin/foyer-reglages"
 
     anchors.bottom: true
     implicitWidth: 560
@@ -74,7 +75,7 @@ PanelWindow {
                 pastille.arrivees = a;
                 if (!pastille.historique)
                     pastille.nonLues++;
-                if (!pastille.nePasDeranger || Number(n.urgency) === 2)
+                if (!pastille.silence || Number(n.urgency) === 2)
                     pastille.montrerNotif(n);
             }
         }
@@ -102,6 +103,186 @@ PanelWindow {
     Timer {
         id: minuteur
         onTriggered: pastille.mode = ""
+    }
+
+    // ===================== Présentation, veille, enregistrement, mises à jour =====
+    // Mode présentation : dès qu'un second écran (vidéoprojecteur) est actif, les
+    // notifications se taisent et la veille est bloquée, comme sur Mac. Un clic sur
+    // le témoin le désactive jusqu'au prochain branchement.
+    readonly property int nbEcrans: Hyprland.monitors.values.length
+    readonly property int nbExternes: Hyprland.monitors.values.filter(m => !/^(eDP|LVDS|DSI)/.test(m.name)).length
+    readonly property bool portable: !!(UPower.displayDevice && UPower.displayDevice.isLaptopBattery)
+    property bool presentationIgnoree: false
+    // Portable : un écran externe actif suffit (même « projecteur seul »).
+    // PC fixe : il faut au moins deux écrans.
+    readonly property bool presentation: (portable ? nbExternes > 0 : nbEcrans > 1) && !presentationIgnoree
+    readonly property bool silence: nePasDeranger || presentation
+    property bool eveille: false              // « Rester éveillé »
+    property bool enregistre: false           // enregistrement de l'écran en cours
+    property string fichierVideo: ""
+    property int secondesEnregistrement: 0
+    property int majDispo: 0
+    property string messageProjection: ""
+    property string modeProjection: "interne"
+    property int choixProjection: 0
+    readonly property var modesProjection: [
+        { id: "interne", nom: "Écran du PC" },
+        { id: "dupliquer", nom: "Dupliquer" },
+        { id: "etendre", nom: "Étendre" },
+        { id: "externe", nom: "Projecteur seul" }
+    ]
+
+    property int externesAvant: 0
+    onNbExternesChanged: {
+        const plus = nbExternes > externesAvant;
+        externesAvant = nbExternes;
+        if (plus) {
+            presentationIgnoree = false;
+            // Écran branché : on propose tout de suite le choix d'affichage.
+            if (osdPret)
+                projection();
+        }
+    }
+
+    // Bloque la mise en veille (hypridle respecte les verrous de systemd-inhibit).
+    Process {
+        running: pastille.eveille || pastille.presentation || pastille.enregistre
+        command: ["systemd-inhibit", "--what=idle", "--who=Foyer", "--why=Présentation, enregistrement ou « rester éveillé »", "sleep", "infinity"]
+    }
+
+    // Écran externe débranché : l'écran du PC est rallumé s'il était éteint.
+    Connections {
+        target: Hyprland
+        function onRawEvent(ev) {
+            if (ev.name === "monitorremoved" || ev.name === "monitorremovedv2")
+                Quickshell.execDetached([pastille.reglages, "projection", "retour"]);
+        }
+    }
+
+    // --- Super+P : choix d'affichage --------------------------------------------
+    // Premier appui : affiche le mode actuel. Appuis suivants : mode suivant.
+    // Sans nouvel appui pendant 1,5 s, le mode choisi s'applique.
+    function projection() {
+        if (mode === "projection") {
+            choixProjection = (choixProjection + 1) % modesProjection.length;
+            minuteur.restart();
+            applicationProjection.restart();
+            return;
+        }
+        lectureProjection.running = false;
+        lectureProjection.running = true;
+    }
+    function appliquerProjection(i) {
+        applicationProjection.stop();
+        choixProjection = i;
+        const id = modesProjection[i].id;
+        if (id !== modeProjection) {
+            modeProjection = id;
+            Quickshell.execDetached([reglages, "projection", id]);
+        }
+        minuteur.interval = 900;
+        minuteur.restart();
+    }
+    Process {
+        id: lectureProjection
+        command: [pastille.reglages, "projection", "etat"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                let e = { mode: "interne", externes: 0 };
+                try {
+                    e = JSON.parse(text);
+                } catch (err) {}
+                pastille.modeProjection = e.mode;
+                pastille.messageProjection = e.externes > 0 ? "" : "Aucun écran externe : branche un vidéoprojecteur ou un écran.";
+                pastille.choixProjection = Math.max(0, pastille.modesProjection.findIndex(m => m.id === e.mode));
+                pastille.mode = "projection";
+                minuteur.interval = e.externes > 0 ? 6000 : 3000;
+                minuteur.restart();
+            }
+        }
+    }
+    Timer {
+        id: applicationProjection
+        interval: 1500
+        onTriggered: pastille.appliquerProjection(pastille.choixProjection)
+    }
+
+    // --- Enregistrement de l'écran (wf-recorder) ---------------------------------
+    function enregistrer(zone) {
+        if (enregistre) {
+            Quickshell.execDetached(["pkill", "-INT", "-x", "wf-recorder"]);
+            return;
+        }
+        fichierVideo = "";
+        secondesEnregistrement = 0;
+        const prep = 'd="$(xdg-user-dir VIDEOS 2>/dev/null || echo "$HOME/Vidéos")/Enregistrements"; mkdir -p "$d"; '
+            + 'f="$d/enregistrement-$(date +%F-%H%M%S).mp4"; ';
+        const fin = zone
+            ? 'g="$(slurp)" || exit 3; echo "$f"; exec wf-recorder -g "$g" -f "$f"'
+            : 'o="$(hyprctl -j activeworkspace | sed -n \'s/.*"monitor": *"\\([^"]*\\)".*/\\1/p\' | head -1)"; echo "$f"; exec wf-recorder ${o:+-o "$o"} -f "$f"';
+        enregistreur.command = ["sh", "-c", prep + fin];
+        enregistreur.running = true;
+    }
+    Process {
+        id: enregistreur
+        stdout: SplitParser {
+            onRead: ligne => {
+                if (!pastille.fichierVideo) {
+                    pastille.fichierVideo = ligne;
+                    pastille.enregistre = true;
+                }
+            }
+        }
+        onExited: code => {
+            const avait = pastille.enregistre;
+            pastille.enregistre = false;
+            if (avait && pastille.fichierVideo)
+                Quickshell.execDetached(["notify-send", "-i", "media-record", "Enregistrement terminé", pastille.fichierVideo.replace(Quickshell.env("HOME"), "~")]);
+            else if (code !== 3 && code !== 0)
+                Quickshell.execDetached(["notify-send", "Foyer", "L'enregistrement n'a pas pu démarrer (wf-recorder)."]);
+        }
+    }
+    Timer {
+        interval: 1000
+        repeat: true
+        running: pastille.enregistre
+        onTriggered: pastille.secondesEnregistrement++
+    }
+    function duree(s) {
+        return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+    }
+
+    // --- Mises à jour disponibles : vérifiées 2 min après l'ouverture de session,
+    // puis toutes les 3 heures. Une notification quand il y en a de nouvelles.
+    Timer {
+        interval: 120000
+        running: true
+        onTriggered: verifMaj.running = true
+    }
+    Timer {
+        interval: 3 * 3600 * 1000
+        repeat: true
+        running: true
+        onTriggered: verifMaj.running = true
+    }
+    Process {
+        id: verifMaj
+        command: [pastille.reglages, "maj-dispo"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    const n = JSON.parse(text).total || 0;
+                    if (n > pastille.majDispo && n > 0)
+                        Quickshell.execDetached(["notify-send", "-i", "system-software-update", "Mises à jour disponibles", n + (n > 1 ? " mises à jour" : " mise à jour") + " : tape « mise à jour » dans le hub."]);
+                    pastille.majDispo = n;
+                } catch (e) {}
+            }
+        }
+    }
+    function mettreAJour() {
+        Quickshell.execDetached(["uwsm", "app", "--", "foot", "-T", "Mise à jour de Foyer", "sh", "-c",
+            '"$HOME/.local/share/foyer/bin/foyer" update; echo; read -r -p "Terminé. Entrée pour fermer." _']);
+        majDispo = 0;
     }
 
     function basculerHistorique() {
@@ -204,7 +385,7 @@ PanelWindow {
     function nomsApplis(liste) {
         return liste.map(n => proprietes(n)["application.name"] || n.description || n.name).filter((x, i, t) => x && t.indexOf(x) === i).join(", ");
     }
-    readonly property bool temoins: micros.length > 0 || videos.length > 0
+    readonly property bool temoins: micros.length > 0 || videos.length > 0 || enregistre || presentation || eveille
 
     // Au repos (rien à montrer), la pastille disparaît. Elle revient pour une
     // notification, un affichage, un témoin, des notifications non lues, ou quand
@@ -228,6 +409,8 @@ PanelWindow {
             return Qt.size(348, 52);
         case "batterie":
             return Qt.size(440, 60);
+        case "projection":
+            return Qt.size(messageProjection ? 440 : 500, messageProjection ? 52 : 60);
         }
         return Qt.size(52 + (temoins ? rangTemoins.implicitWidth + 12 : 0) + (nonLues > 0 ? 22 : 0), 36);
     }
@@ -300,6 +483,8 @@ PanelWindow {
             anchors.fill: parent
             cursorShape: Qt.PointingHandCursor
             onClicked: {
+                if (pastille.mode === "projection")
+                    return;
                 if (pastille.mode === "notif" && pastille.notifCourante) {
                     pastille.ouvrirNotif(pastille.notifCourante);
                     pastille.mode = "";
@@ -352,10 +537,33 @@ PanelWindow {
                     applis: pastille.nomsApplis(pastille.micros)
                 }
                 Temoin {
-                    visible: pastille.videos.length > 0
+                    visible: pastille.videos.length > 0 && !pastille.enregistre
                     libelle: "Caméra / écran"
                     couleur: Theme.accentClair
                     applis: pastille.nomsApplis(pastille.videos)
+                }
+                Temoin {
+                    visible: pastille.enregistre
+                    cliquable: true
+                    libelle: "Enregistrement " + pastille.duree(pastille.secondesEnregistrement) + "  ■"
+                    couleur: "#e5484d"
+                    onClic: pastille.enregistrer(false)
+                }
+                Temoin {
+                    visible: pastille.presentation
+                    cliquable: true
+                    libelle: "Présentation"
+                    couleur: Theme.bouton
+                    sombre: false
+                    onClic: pastille.presentationIgnoree = true
+                }
+                Temoin {
+                    visible: pastille.eveille && !pastille.presentation
+                    cliquable: true
+                    libelle: "Éveillé"
+                    couleur: Theme.bouton
+                    sombre: false
+                    onClic: pastille.eveille = false
                 }
             }
         }
@@ -469,6 +677,62 @@ PanelWindow {
                 font.family: Theme.police
                 font.pixelSize: 13
                 font.weight: Font.DemiBold
+            }
+        }
+
+        // Choix d'affichage (Super+P)
+        Item {
+            anchors.fill: parent
+            opacity: pastille.mode === "projection" ? 1 : 0
+            visible: opacity > 0
+            Behavior on opacity {
+                NumberAnimation { duration: 200 }
+            }
+            Text {
+                visible: pastille.messageProjection !== ""
+                anchors.centerIn: parent
+                width: parent.width - 36
+                horizontalAlignment: Text.AlignHCenter
+                text: pastille.messageProjection
+                color: Theme.texte
+                font.family: Theme.police
+                font.pixelSize: 13
+                elide: Text.ElideRight
+            }
+            Row {
+                visible: pastille.messageProjection === ""
+                anchors.centerIn: parent
+                spacing: 6
+                Repeater {
+                    model: pastille.modesProjection
+                    delegate: Rectangle {
+                        required property var modelData
+                        required property int index
+                        readonly property bool choisi: pastille.choixProjection === index
+                        width: 112
+                        height: 40
+                        radius: 20
+                        color: choisi ? Theme.accent : Theme.bouton
+                        border.width: pastille.modeProjection === modelData.id && !choisi ? 1 : 0
+                        border.color: Theme.accent
+                        Behavior on color {
+                            ColorAnimation { duration: 120 }
+                        }
+                        Text {
+                            anchors.centerIn: parent
+                            text: parent.modelData.nom
+                            color: parent.choisi ? Theme.surAccent : Theme.texte
+                            font.family: Theme.police
+                            font.pixelSize: 12
+                            font.weight: Font.DemiBold
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: pastille.appliquerProjection(parent.index)
+                        }
+                    }
+                }
             }
         }
 
@@ -667,9 +931,13 @@ PanelWindow {
     }
 
     component Temoin: Rectangle {
+        id: temoin
         property string libelle
         property color couleur
         property string applis
+        property bool sombre: true           // texte foncé sur couleur vive
+        property bool cliquable: false
+        signal clic
         implicitWidth: texteTemoin.implicitWidth + 18
         implicitHeight: 22
         radius: 11
@@ -678,9 +946,15 @@ PanelWindow {
             id: texteTemoin
             anchors.centerIn: parent
             text: "● " + parent.libelle
-            color: "#1a1210"
+            color: temoin.sombre ? "#1a1210" : Theme.texte
             font.pixelSize: 11
             font.weight: Font.Bold
+        }
+        MouseArea {
+            anchors.fill: parent
+            enabled: temoin.cliquable
+            cursorShape: Qt.PointingHandCursor
+            onClicked: temoin.clic()
         }
     }
 

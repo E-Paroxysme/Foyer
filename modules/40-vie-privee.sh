@@ -9,6 +9,12 @@ pacman_installer ufw
 info "Pare-feu (ufw) : entrées bloquées par défaut"
 sudo ufw default deny incoming >/dev/null
 sudo ufw default allow outgoing >/dev/null
+# KDE Connect (téléphone) : ports ouverts seulement pour les réseaux locaux privés.
+for reseau in 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12; do
+  for proto in tcp udp; do
+    sudo ufw allow from "$reseau" to any port 1714:1764 proto "$proto" comment "KDE Connect" >/dev/null 2>&1 || true
+  done
+done
 sudo ufw --force enable >/dev/null
 activer_service ufw
 
