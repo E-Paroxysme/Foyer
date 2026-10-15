@@ -56,6 +56,13 @@ quickshell
 papirus-icon-theme
 # Extensions Hyprland (barres de titre) : hyprpm est un paquet à part sur Arch
 hyprpm
+# Ce qu'il faut pour compiler les en-têtes d'Hyprland (dépendances de construction)
+ninja
+glaze
+hyprland-protocols
+hyprwayland-scanner
+xorgproto
+wayland-protocols
 cmake
 meson
 cpio

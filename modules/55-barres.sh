@@ -6,10 +6,9 @@
 set -euo pipefail
 source "$FOYER_DIR/modules/commun.sh"
 
-# hyprpm : paquet séparé de hyprland sur Arch (depuis 0.56).
-if ! command -v hyprpm >/dev/null; then
-  pacman_installer hyprpm || true
-fi
+# hyprpm : paquet séparé de hyprland sur Arch (depuis 0.56), plus ce qu'il faut
+# pour compiler les en-têtes d'Hyprland (dépendances de construction du paquet).
+pacman_installer hyprpm cmake meson ninja cpio glaze hyprland-protocols hyprwayland-scanner xorgproto wayland-protocols || true
 if ! command -v hyprpm >/dev/null; then
   avertir "hyprpm absent : pas de barres de titre."
   exit 0
@@ -25,6 +24,8 @@ mkdir -p "$(dirname "$journal")"
 
 info "Barres de titre : en-têtes d'Hyprland (première fois : quelques minutes)"
 if ! hyprpm update >>"$journal" 2>&1; then
+  # La ligne utile (dépendance manquante) suit « CMake Error » : on la montre.
+  grep -A4 "CMake Error" "$journal" | tail -6 | while IFS= read -r l; do avertir "  $l"; done
   avertir "hyprpm update a échoué (détails : $journal). Pas de barres de titre pour l'instant."
   exit 0
 fi
