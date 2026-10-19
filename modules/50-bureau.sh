@@ -79,13 +79,23 @@ fi
 # LibreWolf : barre de titre du système (boutons Foyer, réduire compris) au lieu
 # de ses boutons dans la barre d'onglets, que Hyprland grise. Ligne ajoutée une
 # fois dans le fichier de réglages personnels de LibreWolf, sans toucher au reste.
-for dossier in "$HOME/.librewolf" "$HOME/.var/app/io.gitlab.librewolf-community/.librewolf"; do
-  [[ "$dossier" == "$HOME/.librewolf" ]] || [[ -d "$(dirname "$dossier")" ]] || continue
+# Emplacements (doc LibreWolf) : ~/.config/librewolf/librewolf/ pour les versions
+# récentes (dossiers XDG), ~/.librewolf/ pour les anciens profils, Flatpak à part.
+xdg_lw="${XDG_CONFIG_HOME:-$HOME/.config}/librewolf/librewolf"
+ancien_lw="$HOME/.librewolf"
+# Ancienne version de Foyer : ~/.librewolf créé pour rien (aucun profil dedans).
+if [[ -d "$ancien_lw" && ! -e "$ancien_lw/profiles.ini" ]] \
+   && [[ -z "$(ls -A "$ancien_lw" | grep -v '^librewolf.overrides.cfg$')" ]]; then
+  rm -rf "$ancien_lw"
+fi
+dossiers_lw=("$xdg_lw")
+[[ -e "$ancien_lw/profiles.ini" ]] && dossiers_lw+=("$ancien_lw")
+[[ -d "$HOME/.var/app/io.gitlab.librewolf-community" ]] && dossiers_lw+=("$HOME/.var/app/io.gitlab.librewolf-community/.librewolf")
+for dossier in "${dossiers_lw[@]}"; do
   mkdir -p "$dossier"
   f="$dossier/librewolf.overrides.cfg"
   # pref() et non defaultPref() : s'impose aussi quand LibreWolf a déjà enregistré
-  # une autre valeur dans le profil (sinon ses propres boutons restent, en double
-  # avec ceux de la barre de titre).
+  # une autre valeur dans le profil.
   if grep -q 'browser.tabs.inTitlebar' "$f" 2>/dev/null; then
     sed -i 's/defaultPref("browser.tabs.inTitlebar"/pref("browser.tabs.inTitlebar"/' "$f"
   else
