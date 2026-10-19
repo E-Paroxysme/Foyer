@@ -84,8 +84,8 @@ if hl.plugin and hl.plugin.hyprbars then
 	}
 	local ok, perso = pcall(function() return io.open(os.getenv("HOME") .. "/.config/foyer/sans-barre.txt", "r") end)
 	if ok and perso then
-		for ligne in perso:lines() do
-			ligne = ligne:gsub("#.*", ""):gsub("^%s+", ""):gsub("%s+$", "")
+		for brute in perso:lines() do
+			local ligne = brute:gsub("#.*", ""):gsub("^%s+", ""):gsub("%s+$", "")
 			if ligne ~= "" then
 				table.insert(classes, (ligne:gsub("%.", "\\.")))
 			end
