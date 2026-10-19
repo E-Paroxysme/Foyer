@@ -62,7 +62,13 @@ hl.bind("SUPER + mouse_up", hl.dsp.focus({ workspace = "e-1" }))
 -- Alt + Tab : fenêtre suivante du bureau actuel, en boucle (après la dernière,
 -- on revient à la première). Les fenêtres réduites ne font pas partie du tour.
 -- Super + Tab : bureau suivant parmi ceux qui existent, en boucle aussi.
+-- Une seule fenêtre (ou aucune) sur le bureau : Alt + Tab passe au bureau suivant.
 hl.bind("ALT + TAB", function()
+	local bureau = hl.get_active_workspace()
+	if bureau and bureau.windows <= 1 then
+		hl.dispatch(hl.dsp.focus({ workspace = "e+1" }))
+		return
+	end
 	hl.dispatch(hl.dsp.window.cycle_next())
 	hl.dispatch(hl.dsp.window.bring_to_top())
 end)
