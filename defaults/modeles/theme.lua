@@ -74,10 +74,27 @@ if hl.plugin and hl.plugin.hyprbars then
 			action = [[hyprctl dispatch 'hl.dsp.window.move({ workspace = "special:reduites", follow = false })']],
 		})
 	end)
-	-- Pas de seconde barre pour les applis qui dessinent déjà la leur.
+	-- Pas de barre Foyer pour les applications qui dessinent déjà la leur (boutons
+	-- dans leur en-tête : applis GNOME/libadwaita…). Hyprland ne peut pas le
+	-- détecter tout seul, d'où cette liste. Pour en ajouter : une classe par ligne
+	-- dans ~/.config/foyer/sans-barre.txt (classe visible avec « hyprctl clients »).
+	local classes = {
+		"org\\.gnome\\..*", "com\\.mitchellh\\.ghostty", "com\\.github\\.tchx84\\.Flatseal",
+		"fr\\.romainvigier\\.MetadataCleaner", "io\\.github\\..*", "io\\.missioncenter\\..*",
+	}
+	local ok, perso = pcall(function() return io.open(os.getenv("HOME") .. "/.config/foyer/sans-barre.txt", "r") end)
+	if ok and perso then
+		for ligne in perso:lines() do
+			ligne = ligne:gsub("#.*", ""):gsub("^%s+", ""):gsub("%s+$", "")
+			if ligne ~= "" then
+				table.insert(classes, (ligne:gsub("%.", "\\.")))
+			end
+		end
+		perso:close()
+	end
 	pcall(hl.window_rule, {
 		name = "foyer-sans-barre",
-		match = { class = "^(org\\.gnome\\..*|com\\.mitchellh\\.ghostty)$" },
+		match = { class = "^(" .. table.concat(classes, "|") .. ")$" },
 		["hyprbars:no_bar"] = true,
 	})
 	pcall(hl.window_rule, {
