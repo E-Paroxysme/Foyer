@@ -83,8 +83,14 @@ for dossier in "$HOME/.librewolf" "$HOME/.var/app/io.gitlab.librewolf-community/
   [[ "$dossier" == "$HOME/.librewolf" ]] || [[ -d "$(dirname "$dossier")" ]] || continue
   mkdir -p "$dossier"
   f="$dossier/librewolf.overrides.cfg"
-  grep -q 'browser.tabs.inTitlebar' "$f" 2>/dev/null \
-    || printf '// Foyer : barre de titre du système (boutons réduire, agrandir, fermer).\ndefaultPref("browser.tabs.inTitlebar", 0);\n' >>"$f"
+  # pref() et non defaultPref() : s'impose aussi quand LibreWolf a déjà enregistré
+  # une autre valeur dans le profil (sinon ses propres boutons restent, en double
+  # avec ceux de la barre de titre).
+  if grep -q 'browser.tabs.inTitlebar' "$f" 2>/dev/null; then
+    sed -i 's/defaultPref("browser.tabs.inTitlebar"/pref("browser.tabs.inTitlebar"/' "$f"
+  else
+    printf '// Foyer : barre de titre du système (boutons réduire, agrandir, fermer).\npref("browser.tabs.inTitlebar", 0);\n' >>"$f"
+  fi
 done
 
 # Fond d'écran : copié une seule fois, remplace ~/.config/foyer/fond.jpg par le tien.
