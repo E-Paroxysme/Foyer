@@ -33,6 +33,17 @@ EOF2
 else
   printf -- '-- Géré par Foyer (profil graphique « normal »)\n' >"$materiel"
 fi
+# Bloc « machine virtuelle » dans ~/.config/uwsm/env (variables de toute la
+# session). Sans argument : retire le bloc. Le reste du fichier est conservé.
+bloc_vm() {
+  local f="$FOYER_CONFIG/uwsm/env"
+  mkdir -p "$(dirname "$f")"
+  touch "$f"
+  sed -i '/# Foyer : machine virtuelle (début)/,/# Foyer : machine virtuelle (fin)/d' "$f"
+  if (( $# > 0 )); then
+    { echo "# Foyer : machine virtuelle (début)"; printf '%s\n' "$@"; echo "# Foyer : machine virtuelle (fin)"; } >>"$f"
+  fi
+}
 # Machine virtuelle (VMware, QEMU, VirtualBox…) : le curseur matériel s'y affiche mal.
 if command -v systemd-detect-virt >/dev/null && systemd-detect-virt -q --vm; then
   info "Machine virtuelle détectée ($(systemd-detect-virt --vm)) : curseur logiciel"
@@ -46,8 +57,23 @@ if command -v systemd-detect-virt >/dev/null && systemd-detect-virt -q --vm; the
   fi
   mkdir -p "$FOYER_CONFIG/foyer"
   printf '# Géré par Foyer (machine virtuelle détectée).\nQT_QUICK_BACKEND=software\n' >"$FOYER_CONFIG/foyer/hub.env"
-elif grep -q 'machine virtuelle' "$FOYER_CONFIG/foyer/hub.env" 2>/dev/null; then
-  rm -f "$FOYER_CONFIG/foyer/hub.env"
+  # Applis GTK 4 (Flatseal, Fichiers…) et WebKit : même souci avec le pilote
+  # virtuel (« Lost connection to Wayland compositor »). Rendu sans carte
+  # graphique pour toute la session (pris en compte à la prochaine connexion)
+  # et pour les applis Flatpak.
+  info "Machine virtuelle : applications GTK 4 dessinées sans la carte graphique"
+  bloc_vm 'export GSK_RENDERER=cairo' 'export WEBKIT_DISABLE_DMABUF_RENDERER=1'
+  if command -v flatpak >/dev/null; then
+    flatpak override --user --env=GSK_RENDERER=cairo --env=WEBKIT_DISABLE_DMABUF_RENDERER=1 2>/dev/null || true
+  fi
+else
+  if grep -q 'machine virtuelle' "$FOYER_CONFIG/foyer/hub.env" 2>/dev/null; then
+    rm -f "$FOYER_CONFIG/foyer/hub.env"
+  fi
+  if grep -q '# Foyer : machine virtuelle' "$FOYER_CONFIG/uwsm/env" 2>/dev/null; then
+    bloc_vm
+    command -v flatpak >/dev/null && flatpak override --user --unset-env=GSK_RENDERER --unset-env=WEBKIT_DISABLE_DMABUF_RENDERER 2>/dev/null || true
+  fi
 fi
 deposer "$materiel" "$FOYER_CONFIG/hypr/materiel.lua"
 # Réglages faits dans le hub (veille, souris, écran) : réécrits par-dessus les fichiers par défaut.
